@@ -19,7 +19,16 @@ python -m epkit validate studies/your.yaml
 python -m epkit run studies/your.yaml
 ```
 
-输出：`findings.json`（结构化结果 + 样本流 + provenance）、`report.md`（表）。
+输出：
+
+```
+output/
+  findings.json     结构化结果：每条带 status(ok/warn/fail)、why、spec hash、样本 n
+  report.md         样本流表、组间差异表、回归表、稳健性表
+  figures/          期限结构图、安慰剂图（仅在有对应结果时生成）
+```
+
+安装成命令（可选）：`uv pip install -e .`，之后用 `epkit run ...`。
 
 ## Robustness
 
@@ -96,8 +105,9 @@ python -m pytest tests/ -q
 
 ## Status
 
-事件研究 + 横截面回归可用：CAR（三种基准、两种窗口口径）、样本流、组间差异、OLS/FE/IV + 五套推断口径、结构化输出。
-稳健性：缩尾、剔除大类、留一法、时间安慰剂。
+已可用：CAR（三种基准 × 两种窗口口径）、样本流、单样本均值检验、组间差异、OLS/FE/IV + 五套推断口径、缩尾、剔除大类、留一法、时间安慰剂、表与图。
+
+复现验收（`tests/`）：两篇已发表论文的表，均值差/标准误/t 值与原文一致。
 条件：pandas 3.x / Python 3.12。
 
 作者：[@Northseacaviar](https://github.com/Northseacaviar)
