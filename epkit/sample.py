@@ -68,11 +68,7 @@ def build_sample(spec: StudySpec, event_date: str | None = None,
         df[d.name] = v
 
     for i, f in enumerate(spec.sample.filters, start=1):
-        before = len(df)
-        df2 = flow.apply(df, f, i)
-        if len(df2) == before:
-            flow.record(f.name or f"filter_{i}", (f.reason or "无剔除") + "（未命中）", before, len(df2))
-        df = df2
+        df = flow.apply(df, f, i)
 
     for g in spec.sample.groups:
         if g.expr:

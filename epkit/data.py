@@ -72,7 +72,10 @@ class SampleFlow:
             if cols:
                 df = df.dropna(subset=cols).copy()
         label = f.name or f"filter_{idx}"
-        self.record(label, f.reason or f.drop_if or f.keep_if or "剔除标记行", n0, len(df))
+        reason = f.reason or f.drop_if or f.keep_if or "剔除标记行"
+        if len(df) == n0:
+            reason += "（未命中）"
+        self.record(label, reason, n0, len(df))
         return df
 
     def as_list(self) -> list[dict]:

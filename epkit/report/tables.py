@@ -67,6 +67,26 @@ def reg_md(F: Findings, fid_prefix: str = "") -> str:
     return "\n".join(out)
 
 
+def robustness_md(F: Findings) -> str:
+    """安慰剂与留一法。"""
+    out = []
+    for f in F.items:
+        if f.type == "placebo":
+            rows = [[r["anchor"], f"{r['diff']:+.3f}" if r["diff"] is not None else "-",
+                     f"{r['t']:.2f}" if r["t"] is not None else "-"] for r in f.data["anchors"]]
+            out.append(f"**{f.id}**：{f.data['var']}，事件日 {f.data['event_diff']:+.3f}，"
+                       f"安慰剂均值 {f.data['placebo_mean']:+.3f}（sd {f.data['placebo_sd']:.3f}），"
+                       f"z={f.data['z']:.2f}，经验 p={f.data['p_empirical']:.3f}")
+            out.append("")
+            out.append(md_table(["锚点日期", "组间差", "t"], rows))
+            out.append("")
+        elif f.type == "leave_one_out":
+            out.append(f"**{f.id}**：原差 {f.data['diff']:+.3f}；最敏感单点使差变为 "
+                       f"{f.data['diff_without_extreme']:+.3f}（移动 {f.data['max_shift']:+.3f}）")
+            out.append("")
+    return "\n".join(out) if out else "_没有稳健性检验_"
+
+
 def summary_text(F: Findings) -> str:
     lines = []
     s = F.summary()
@@ -83,7 +103,8 @@ def report_md(F: Findings) -> str:
     parts = [f"# {F.spec_name}", "", f"spec hash `{F.spec_hash}`；方法 `{F.meta.get('method')}`；"
              f"窗口口径 `{F.meta.get('car_mode')}`", "", "## 样本流", "", sample_flow_md(F.sample_flow),
              "", "## 组间差异", "", group_diff_md(F),
-             "", "## 回归", "", reg_md(F), ""]
+             "", "## 回归", "", reg_md(F),
+             "", "## 稳健性", "", robustness_md(F), ""]
     warns = [f for f in F.items if f.status != "ok"]
     if warns:
         parts += ["## 需要处理", ""]

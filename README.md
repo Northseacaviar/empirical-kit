@@ -21,6 +21,15 @@ python -m epkit run studies/your.yaml
 
 输出：`findings.json`（结构化结果 + 样本流 + provenance）、`report.md`（表）。
 
+## Robustness
+
+```yaml
+- leave_one_out: {var: car_0_5, by: zero_div}
+- placebo: {var: car_0_5, by: zero_div, n: 10, gap: 20}   # 自动取事件日前的非事件锚点
+```
+
+安慰剂输出 z =（事件日差 − 锚点均值）/ 锚点标准差，|z| < 1.96 判 `warn`：同一套口径在随便哪天也能复制出相近的组间差。留一法给最敏感单点的位移占原差的比例，超过 20% 判 `warn`。
+
 ## Regression
 
 ```yaml
@@ -88,7 +97,7 @@ python -m pytest tests/ -q
 ## Status
 
 事件研究 + 横截面回归可用：CAR（三种基准、两种窗口口径）、样本流、组间差异、OLS/FE/IV + 五套推断口径、结构化输出。
-检查库（安慰剂、缩尾、留一、聚类敏感性网格）在 M3。
+稳健性：缩尾、剔除大类、留一法、时间安慰剂。
 条件：pandas 3.x / Python 3.12。
 
 作者：[@Northseacaviar](https://github.com/Northseacaviar)
