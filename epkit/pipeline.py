@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from .checks.group import group_diff
+from .estimate.reg import reg
 from .data import SampleFlow, load_cross_section, load_market, load_prices, read_table
 from .estimate.event import build_event_panel
 from .findings import Finding, Findings
@@ -49,17 +50,26 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
     F.meta["method"] = spec.returns.method
     F.meta["windows"] = spec.returns.windows
 
-    prices = load_prices(spec)
-    if verbose:
-        print(f"[1/5] 价格 {len(prices)} 只")
-    market = load_market(spec)
-    res = build_event_panel(spec, prices, market)
-    panel = res.panel
-    if verbose:
-        print(f"[2/5] 事件面板 {len(panel)} 行，窗口 {len(spec.returns.windows)} 个")
+    if spec.data.panel:
+        df = read_table(spec.data.panel)
+        flow = SampleFlow(initial=len(df))
+        flow.record("load_panel", "读入已有分析面板（跳过 CAR 计算）", len(df), len(df))
+        if verbose:
+            print(f"[1/5] 面板 {len(df)} 行（panel 模式）")
+        xs = None
+        panel = df
+    else:
+        prices = load_prices(spec)
+        if verbose:
+            print(f"[1/5] 价格 {len(prices)} 只")
+        market = load_market(spec)
+        res = build_event_panel(spec, prices, market)
+        panel = res.panel
+        if verbose:
+            print(f"[2/5] 事件面板 {len(panel)} 行，窗口 {len(spec.returns.windows)} 个")
+        xs = load_cross_section(spec)
+        flow = SampleFlow(initial=len(panel))
 
-    xs = load_cross_section(spec)
-    flow = SampleFlow(initial=len(panel))
     if xs is not None:
         key = spec.data.code_col
         if key not in xs.columns:
@@ -76,8 +86,16 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
         df = merged
     else:
         df = panel
-        flow.record("no_cross_section", "未提供样本框，直接用价格面板", len(panel), len(panel))
 
+    for d in spec.sample.derive:
+        try:
+            v = df.eval(d.expr)
+        except Exception as exc:
+            raise ValueError(f"派生变量 {d.name} 无法求值：{d.expr}（{exc}）") from exc
+        # 布尔表达式自动转 0/1：df.eval 不认识 .astype()
+        if getattr(v, "dtype", None) == bool:
+            v = v.astype(int)
+        df[d.name] = v
     df = _apply_filters(df, spec, flow)
     _apply_groups(df, spec)
     F.sample_flow = flow.as_list()
@@ -88,9 +106,11 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
         if "group_diff" in t:
             c = t["group_diff"]
             F.add(group_diff(df, c["var"], c["by"], fid=c.get("id"), min_n=c.get("min_n", 30)))
+        elif "reg" in t:
+            F.add(reg(df, t["reg"]))
         else:
             F.add(Finding(str(list(t))[:40], "unknown", "fail",
-                          f"未知检验类型：{list(t)}；支持的：group_diff"))
+                          f"未知检验类型：{list(t)}；支持的：group_diff / reg"))
 
     F.meta["elapsed_s"] = round(time.time() - t0, 2)
     F.meta["n_final"] = int(len(df))

@@ -21,6 +21,8 @@ class DataSpec(BaseModel):
 
     prices: str | None = None
     prices_glob: str = "*.csv"
+    # 已算好的分析面板：设置后跳过 CAR 计算，直接吃这张表
+    panel: str | None = None
     index: str | None = None
     cross_section: str | None = None
     code_col: str = "code"
@@ -91,7 +93,15 @@ class GroupSpec(BaseModel):
     labels: list[str] | None = None
 
 
+class DeriveSpec(BaseModel):
+    """派生变量：name + pandas 表达式。在过滤之前执行。"""
+
+    name: str
+    expr: str
+
+
 class SampleSpec(BaseModel):
+    derive: list[DeriveSpec] = Field(default_factory=list)
     filters: list[FilterSpec] = Field(default_factory=list)
     groups: list[GroupSpec] = Field(default_factory=list)
 
@@ -99,11 +109,17 @@ class SampleSpec(BaseModel):
 class StudySpec(BaseModel):
     name: str
     data: DataSpec
-    event: EventSpec
+    event: EventSpec | None = None
     returns: ReturnsSpec = Field(default_factory=ReturnsSpec)
     sample: SampleSpec = Field(default_factory=SampleSpec)
     tests: list[dict[str, Any]] = Field(default_factory=list)
     output_dir: str = "output"
+
+    @model_validator(mode="after")
+    def _need_event(self):
+        if not self.data.panel and self.event is None:
+            raise ValueError("非 panel 模式需要 event（事件日）")
+        return self
 
     @classmethod
     def load(cls, path: str | Path) -> "StudySpec":

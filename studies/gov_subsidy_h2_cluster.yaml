@@ -1,0 +1,36 @@
+name: gov-subsidy-h2-cluster
+# 复现 cluster_sensitivity.md 的 H2 模型：披露分类 → CAR[-3,3]
+data:
+  panel: D:/gov-subsidy-stock-paper/data/analysis_sample.csv
+  code_col: sec_code
+sample:
+  derive:
+    - name: disclosed_asset
+      expr: "disclosed_class == 'asset'"
+    - name: disclosed_income
+      expr: "disclosed_class == 'income'"
+    - name: disclosed_mixed
+      expr: "disclosed_class == 'mixed'"
+    - name: cumulative
+      expr: "amount_type == 'interval_cumulative'"
+  filters:
+    - name: industry_ok
+      require_nonnull: [industry1, year]
+      reason: 行业/年份缺失
+tests:
+  - reg:
+      id: h2_disclose
+      y: car_m3_3
+      x: [disclosed_asset, disclosed_income, disclosed_mixed, log_amount, cumulative]
+      controls: [size, lev_w, roa_w, growth_w, cash_w, soe, age]
+      fe: [industry1, year]
+      cluster: [sec_code, announcement_date]
+  - reg:
+      id: h3_amount_lev
+      y: car_m3_3
+      x: [log_amount, "log_amount:lev_w"]
+      focus: "log_amount:lev_w"
+      controls: [rd_related, project_based, asset_related, income_related, tax_refund, employment_related, cumulative, size, lev_w, roa_w, growth_w, cash_w, soe, age]
+      fe: [industry1, year]
+      cluster: [sec_code, announcement_date]
+output_dir: D:/empirical-kit/examples/gov-subsidy/output
