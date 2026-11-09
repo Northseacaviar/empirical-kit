@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "epkit"
+version = "0.1.0"
+description = "Spec-driven empirical toolkit for research agents"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "statsmodels>=0.14",
+    "pyfixest>=0.20",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+epkit = "epkit.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["epkit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import __version__
 from .pipeline import run_spec
+from .report.figures import make_all
 from .report.tables import report_md, summary_text
 from .spec import StudySpec
 
@@ -35,7 +36,8 @@ def main(argv: list[str] | None = None) -> int:
         spec = StudySpec.load(args.spec)
         checks = []
         for label, p in [("prices", spec.data.prices), ("index", spec.data.index),
-                         ("cross_section", spec.data.cross_section)]:
+                         ("cross_section", spec.data.cross_section),
+                         ("panel", spec.data.panel)]:
             if p:
                 checks.append((label, p, Path(p).exists()))
         print(json.dumps({"name": spec.name, "hash": spec.hash(),
@@ -49,9 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     F.save(out / "findings.json")
     (out / "report.md").write_text(report_md(F), encoding="utf-8")
+    figs = make_all(F, out / "figures")
     if not args.quiet:
         print(summary_text(F))
         print(f"\n产物：{out/'findings.json'}  {out/'report.md'}")
+        for p in figs:
+            print(f"      图：{p}")
     return 0 if not any(f.status == "fail" for f in F.items) else 2
 
 

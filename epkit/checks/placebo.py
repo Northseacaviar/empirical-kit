@@ -84,6 +84,7 @@ def time_placebo(spec: StudySpec, cfg: dict, prices: dict | None = None,
     why = (f"{var} 组间差：事件日 {event_diff:+.3f}；"
            f"{len(ok)} 个安慰剂锚点均值 {mu:+.3f}（sd {sd:.3f}），z={z:.2f}，经验 p={p_emp:.3f}")
     return Finding(fid, "placebo", status, why,
-                   {"var": var, "by": by, "event_diff": event_diff,
+                   {"var": var, "by": by, "event_date": str(spec.event.date),
+                    "event_diff": event_diff,
                     "placebo_mean": mu, "placebo_sd": sd, "z": z, "p_empirical": p_emp,
                     "anchors": rows}, warnings=warnings)

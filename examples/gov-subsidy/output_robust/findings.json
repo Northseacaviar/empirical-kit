@@ -1,11 +1,11 @@
 {
   "spec": {
     "name": "gov-subsidy-robust",
-    "hash": "b3ff1a633a60"
+    "hash": "e6573c29b049"
   },
   "run": {
-    "started": "2026-11-09T17:31:21",
-    "finished": "2026-11-09T17:31:21"
+    "started": "2026-11-09T20:38:29",
+    "finished": "2026-11-09T20:38:29"
   },
   "meta": {
     "spec_path": "D:\\empirical-kit\\studies\\gov_subsidy_robust.yaml",
@@ -45,7 +45,9 @@
         60
       ]
     ],
-    "elapsed_s": 0.03,
+    "scale": 1.0,
+    "unit": "",
+    "elapsed_s": 0.12,
     "n_final": 352
   },
   "sample_flow": [
@@ -67,7 +69,7 @@
       "id": "base_3d",
       "type": "group_diff",
       "status": "warn",
-      "why": "差 = 1 - 0：0.043，t=2.26（Welch，组 n=337/15），单位 个百分点",
+      "why": "差 = 1 - 0：0.043，t=2.26（Welch，组 n=337/15）",
       "data": {
         "var": "car_m3_3",
         "by": "disclosed_asset",
@@ -88,6 +90,8 @@
           }
         ],
         "diff": 0.04343820045001827,
+        "scale": 1.0,
+        "unit": "pp",
         "t": 2.26445213701455,
         "p": 0.038893171068566976,
         "t_test": "welch",
@@ -99,14 +103,13 @@
           0.005840199816503994,
           0.08103620108353254
         ],
-        "unit": "pp",
         "n_before_robustness": 352,
         "winsor": null,
         "drop_where": null
       },
       "provenance": {
         "spec": "gov-subsidy-robust",
-        "spec_hash": "b3ff1a633a60"
+        "spec_hash": "e6573c29b049"
       },
       "warnings": [
         "小样本：组样本量 15 < 30，t 值近似性差"
@@ -116,7 +119,7 @@
       "id": "winsor_3d",
       "type": "group_diff",
       "status": "warn",
-      "why": "差 = 1 - 0：0.042，t=2.24（Welch，组 n=337/15）；缩尾到 [-0.166, 0.144]，单位 个百分点",
+      "why": "差 = 1 - 0：0.042，t=2.24（Welch，组 n=337/15）；缩尾到 [-0.166, 0.144]",
       "data": {
         "var": "car_m3_3",
         "by": "disclosed_asset",
@@ -137,6 +140,8 @@
           }
         ],
         "diff": 0.04214394788089082,
+        "scale": 1.0,
+        "unit": "pp",
         "t": 2.2358024491913095,
         "p": 0.04112716854348815,
         "t_test": "welch",
@@ -148,7 +153,6 @@
           0.0051987616563998265,
           0.07908913410538182
         ],
-        "unit": "pp",
         "n_before_robustness": 352,
         "winsor": [
           0.01,
@@ -158,7 +162,7 @@
       },
       "provenance": {
         "spec": "gov-subsidy-robust",
-        "spec_hash": "b3ff1a633a60"
+        "spec_hash": "e6573c29b049"
       },
       "warnings": [
         "小样本：组样本量 15 < 30，t 值近似性差"
@@ -168,7 +172,7 @@
       "id": "ex_bigcap",
       "type": "group_diff",
       "status": "warn",
-      "why": "差 = 1 - 0：0.043，t=2.26（Welch，组 n=334/15）；先剔除 3 条（size > 25），单位 个百分点",
+      "why": "差 = 1 - 0：0.043，t=2.26（Welch，组 n=334/15）；先剔除 3 条（size > 25）",
       "data": {
         "var": "car_m3_3",
         "by": "disclosed_asset",
@@ -189,6 +193,8 @@
           }
         ],
         "diff": 0.04337852131689351,
+        "scale": 1.0,
+        "unit": "pp",
         "t": 2.2607743960081264,
         "p": 0.03915264367025649,
         "t_test": "welch",
@@ -200,14 +206,13 @@
           0.005771097094805999,
           0.08098594553898102
         ],
-        "unit": "pp",
         "n_before_robustness": 352,
         "winsor": null,
         "drop_where": "size > 25"
       },
       "provenance": {
         "spec": "gov-subsidy-robust",
-        "spec_hash": "b3ff1a633a60"
+        "spec_hash": "e6573c29b049"
       },
       "warnings": [
         "小样本：组样本量 15 < 30，t 值近似性差"
@@ -217,7 +222,7 @@
       "id": "winsor_ex_big",
       "type": "group_diff",
       "status": "warn",
-      "why": "差 = 1 - 0：0.042，t=2.23（Welch，组 n=334/15）；先剔除 3 条（size > 25）；缩尾到 [-0.166, 0.144]，单位 个百分点",
+      "why": "差 = 1 - 0：0.042，t=2.23（Welch，组 n=334/15）；先剔除 3 条（size > 25）；缩尾到 [-0.166, 0.144]",
       "data": {
         "var": "car_m3_3",
         "by": "disclosed_asset",
@@ -238,6 +243,8 @@
           }
         ],
         "diff": 0.04208349934137376,
+        "scale": 1.0,
+        "unit": "pp",
         "t": 2.231894937585014,
         "p": 0.04141980371073918,
         "t_test": "welch",
@@ -249,7 +256,6 @@
           0.005126715525042923,
           0.07904028315770459
         ],
-        "unit": "pp",
         "n_before_robustness": 352,
         "winsor": [
           0.01,
@@ -259,7 +265,7 @@
       },
       "provenance": {
         "spec": "gov-subsidy-robust",
-        "spec_hash": "b3ff1a633a60"
+        "spec_hash": "e6573c29b049"
       },
       "warnings": [
         "小样本：组样本量 15 < 30，t 值近似性差"

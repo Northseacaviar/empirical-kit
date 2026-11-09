@@ -6,6 +6,7 @@ data:
   code_col: code
   date_col: date
   close_col: close
+  unit: "pp"
 event:
   mode: single
   date: "2024-04-12"
