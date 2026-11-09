@@ -1,0 +1,34 @@
+name: guojiutiao-tab2a
+data:
+  prices: D:/guojiutiao-paper/data/px_v2
+  prices_glob: "*.csv"
+  cross_section: D:/empirical-kit/examples/guojiutiao/cs_guojiutiao.csv
+  code_col: code
+  date_col: date
+  close_col: close
+event:
+  mode: single
+  date: "2024-04-12"
+  anchor_rule: last_on_or_before
+returns:
+  method: raw
+  car_mode: close_to_close
+  windows: [[0, 1], [0, 3], [0, 5], [0, 10], [0, 20], [0, 30], [0, 40], [0, 60]]
+sample:
+  filters:
+    - name: has_div
+      require_nonnull: [div2023]
+      reason: 缺 2023 年度分红数据
+  groups:
+    - name: zero_div
+      expr: "div2023 == 0"
+tests:
+  - group_diff: {var: car_0_1,  by: zero_div, id: tab2a_1d}
+  - group_diff: {var: car_0_3,  by: zero_div, id: tab2a_3d}
+  - group_diff: {var: car_0_5,  by: zero_div, id: tab2a_5d}
+  - group_diff: {var: car_0_10, by: zero_div, id: tab2a_10d}
+  - group_diff: {var: car_0_20, by: zero_div, id: tab2a_20d}
+  - group_diff: {var: car_0_30, by: zero_div, id: tab2a_30d}
+  - group_diff: {var: car_0_40, by: zero_div, id: tab2a_40d}
+  - group_diff: {var: car_0_60, by: zero_div, id: tab2a_60d}
+output_dir: D:/empirical-kit/examples/guojiutiao/output
