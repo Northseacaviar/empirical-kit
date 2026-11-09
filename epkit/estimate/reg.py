@@ -22,14 +22,15 @@ except ImportError:  # pragma: no cover
 
 def _formula(y: str, xs: list[str], controls: list[str], fe: list[str],
              iv: dict[str, Any] | None = None) -> str:
-    right = " + ".join(xs + controls) if (xs + controls) else "1"
-    f = f"{y} ~ {right}"
-    if fe:
-        f += " | " + " + ".join(fe)
+    parts = list(xs) + list(controls)
     if iv:
         endog = " + ".join(iv["endog"])
         inst = " + ".join(iv["instruments"])
-        f += f" | {endog} ~ {inst}"
+        parts.append(f"[{endog} ~ {inst}]")   # pyfixest 0.70 的 IV 写法
+    right = " + ".join(parts) if parts else "1"
+    f = f"{y} ~ {right}"
+    if fe:
+        f += " | " + " + ".join(fe)
     return f
 
 
@@ -65,7 +66,7 @@ def reg(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
     if not ladder:
         ladder = [[]]
     iv = cfg.get("iv")
-    focus = cfg.get("focus") or (xs[0] if xs else None)
+    focus = cfg.get("focus") or (xs[0] if xs else None) or (iv["endog"][0] if iv else None)
 
     vcovs = _vcov_specs(clusters)
     base = cfg.get("main_vcov") or next((n for n, _ in reversed(vcovs)
@@ -81,7 +82,8 @@ def reg(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
                 m = pf.feols(fml, data=df, vcov=vspec)
                 tidy = m.tidy()
                 row = {}
-                for xv in xs:
+                wanted = list(xs) + (list(iv["endog"]) if iv else [])
+                for xv in wanted:
                     if xv not in tidy.index:
                         continue
                     row[xv] = {
@@ -127,7 +129,10 @@ def reg(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
     if main0:
         coef = main0.get("coef")
         t_main = main0["by_vcov"][base]["terms"].get(focus, {}).get("t")
-        why = (f"{focus} → {y}：β={coef:.4f}，t={t_main:.2f}（{base}，N={main0['n']}）")
+        if coef is None:
+            why = f"{focus} → {y}：系数未能提取（检查变量名是否与 tidy 一致）"
+        else:
+            why = (f"{focus} → {y}：β={coef:.4f}，t={t_main:.2f}（{base}，N={main0['n']}）")
     else:
         why = "所有设定均估计失败"
     return Finding(fid, "reg", status, why,
