@@ -32,6 +32,10 @@ class DataSpec(BaseModel):
     # 读入时保留的列（过滤、分组用），默认全留
     keep_cols: list[str] = Field(default_factory=list)
     encoding: str = "utf-8-sig"
+    # 变量单位换算：CSMAR 的收益率是小数(-0.008)，自建面板常是百分点(-0.8)。
+    # scale=100 表示「数据是小数、报告成百分点」。t 值不受影响。
+    scale: float = 1.0
+    unit: str = ""
 
 
 class EventSpec(BaseModel):

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .checks.group import group_diff
 from .checks.leave_one import leave_one_out
+from .checks.mean import mean_test
 from .checks.placebo import time_placebo
 from .estimate.reg import reg
 from .findings import Finding, Findings
@@ -24,6 +25,8 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
     F.meta["car_mode"] = spec.returns.car_mode
     F.meta["method"] = spec.returns.method
     F.meta["windows"] = spec.returns.windows
+    F.meta["scale"] = spec.data.scale
+    F.meta["unit"] = spec.data.unit
 
     prices, xs, market = load_inputs(spec)
     df, flow = build_sample(spec, prices=prices, xs=xs, market=market)
@@ -43,9 +46,14 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
             c = t["group_diff"]
             F.add(group_diff(df, c["var"], c["by"], fid=c.get("id"),
                              min_n=c.get("min_n", 30), winsor=c.get("winsor"),
-                             drop_where=c.get("drop_where")))
+                             drop_where=c.get("drop_where"),
+                             scale=spec.data.scale, unit=spec.data.unit))
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
+        elif "mean_test" in t:
+            c = t["mean_test"]
+            F.add(mean_test(df, c["var"], fid=c.get("id"), min_n=c.get("min_n", 30),
+                            by=c.get("by"), scale=spec.data.scale, unit=spec.data.unit))
         elif "leave_one_out" in t:
             c = t["leave_one_out"]
             F.add(leave_one_out(df, c["var"], c["by"], fid=c.get("id")))
@@ -54,7 +62,7 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
                                verbose=verbose))
         else:
             F.add(Finding(str(list(t))[:40], "unknown", "fail",
-                          f"未知检验类型：{list(t)}；支持的：group_diff / reg / placebo / leave_one_out"))
+                          f"未知检验类型：{list(t)}；支持的：group_diff / reg / placebo / leave_one_out / mean_test"))
 
     F.meta["elapsed_s"] = round(time.time() - t0, 2)
     F.meta["n_final"] = int(len(df))

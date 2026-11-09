@@ -15,7 +15,8 @@ from ..findings import Finding
 
 def group_diff(df: pd.DataFrame, var: str, group: str, fid: str | None = None,
                min_n: int = 30, winsor: list[float] | None = None,
-               drop_where: str | None = None) -> Finding:
+               drop_where: str | None = None, scale: float = 1.0,
+               unit: str = "") -> Finding:
     """组间均值差。
 
     winsor     : [lo, hi] 分位点，先缩尾再检验（记原作 vs 缩尾后两个差）
@@ -76,12 +77,13 @@ def group_diff(df: pd.DataFrame, var: str, group: str, fid: str | None = None,
     data = {
         "var": var, "by": group,
         "groups": [
-            {"label": str(levels[0]), "n": int(len(g0)), "mean": float(g0.mean()),
-             "sd": float(g0.std(ddof=1)), "median": float(g0.median())},
-            {"label": str(levels[1]), "n": int(len(g1)), "mean": float(g1.mean()),
-             "sd": float(g1.std(ddof=1)), "median": float(g1.median())},
+            {"label": str(levels[0]), "n": int(len(g0)), "mean": float(g0.mean()) * scale,
+             "sd": float(g0.std(ddof=1)) * scale, "median": float(g0.median()) * scale},
+            {"label": str(levels[1]), "n": int(len(g1)), "mean": float(g1.mean()) * scale,
+             "sd": float(g1.std(ddof=1)) * scale, "median": float(g1.median()) * scale},
         ],
-        "diff": diff,
+        "diff": diff * scale,
+        "scale": scale, "unit": unit,
         "t": float(t_main), "p": float(p_main), "t_test": "welch",
         "t_equal": float(t_eq), "p_equal": float(p_eq),
         "t_welch": float(t_w), "p_welch": float(p_w), "ci95_welch": [float(ci[0]), float(ci[1])],
@@ -90,7 +92,8 @@ def group_diff(df: pd.DataFrame, var: str, group: str, fid: str | None = None,
         "winsor": winsor,
         "drop_where": drop_where,
     }
-    why = (f"差 = {levels[1]} - {levels[0]}：{diff:.3f}，t={t_main:.2f}（Welch，组 n={len(g0)}/{len(g1)}）{note}")
-    if data["unit"]:
-        why += "，单位 个百分点"
+    why = (f"差 = {levels[1]} - {levels[0]}：{diff * scale:.3f}，t={t_main:.2f}"
+           f"（Welch，组 n={len(g0)}/{len(g1)}）{note}")
+    if unit:
+        why += f"，单位 {unit}"
     return Finding(fid, "group_diff", status, why, data, warnings=warnings)
