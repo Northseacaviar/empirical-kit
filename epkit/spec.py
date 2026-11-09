@@ -35,6 +35,8 @@ class DataSpec(BaseModel):
     # 变量单位换算：CSMAR 的收益率是小数(-0.008)，自建面板常是百分点(-0.8)。
     # scale=100 表示「数据是小数、报告成百分点」。t 值不受影响。
     scale: float = 1.0
+    # 只有这些前缀的变量按 scale 换算（如 ["car"]）。为空则作用于全部。
+    scale_vars: list[str] = Field(default_factory=list)
     unit: str = ""
 
 
@@ -118,6 +120,13 @@ class StudySpec(BaseModel):
     sample: SampleSpec = Field(default_factory=SampleSpec)
     tests: list[dict[str, Any]] = Field(default_factory=list)
     output_dir: str = "output"
+
+    def scale_for(self, var: str) -> float:
+        if self.data.scale == 1.0:
+            return 1.0
+        if not self.data.scale_vars:
+            return self.data.scale
+        return self.data.scale if any(var.startswith(p) for p in self.data.scale_vars) else 1.0
 
     @model_validator(mode="after")
     def _need_event(self):

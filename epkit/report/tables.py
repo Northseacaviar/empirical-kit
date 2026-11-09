@@ -67,6 +67,57 @@ def reg_md(F: Findings, fid_prefix: str = "") -> str:
     return "\n".join(out)
 
 
+def describe_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "describe"]
+    out = []
+    for f in items:
+        if f.data.get("by"):
+            rows = []
+            for it in f.data["vars"]:
+                for g in it["groups"]:
+                    rows.append([it["var"], g["label"], g["n"], f"{g['mean']:.3f}",
+                                 f"{g['sd']:.3f}", f"{g['median']:.3f}",
+                                 f"{g['p25']:.3f}", f"{g['p75']:.3f}"])
+            out.append(md_table(["变量", "组", "N", "均值", "标准差", "中位数", "P25", "P75"], rows))
+        else:
+            rows = [[it["var"], it["n"], f"{it['mean']:.3f}", f"{it['sd']:.3f}",
+                     f"{it['median']:.3f}", f"{it['p25']:.3f}", f"{it['p75']:.3f}",
+                     f"{it['min']:.3f}", f"{it['max']:.3f}"] for it in f.data["vars"] if it.get("n", 0) > 1]
+            out.append(md_table(["变量", "N", "均值", "标准差", "中位数", "P25", "P75", "最小", "最大"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有描述统计_"
+
+
+def corr_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "corr"]
+    out = []
+    for f in items:
+        vs = f.data["vars"]
+        m = f.data["matrix"]
+        rows = []
+        for i, v in enumerate(vs):
+            rows.append([v] + ["" if i == j else f"{m[i][j]:.2f}" if m[i][j] is not None else "-"
+                               for j in range(len(vs))])
+        out.append(f"**{f.id}**（{f.data['method']}，{f.data['n_complete']} 行完整）")
+        out.append("")
+        out.append(md_table([""] + vs, rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有相关矩阵_"
+
+
+def vif_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "vif"]
+    out = []
+    for f in items:
+        rows = [[i["var"], f"{i['vif']:.2f}" if i.get("vif") is not None else "-",
+                 f"{i['r2']:.3f}" if i.get("r2") is not None else "-"] for i in f.data["items"]]
+        out.append(f"**{f.id}**（{'组内去均值：' + '/'.join(f.data['fe']) if f.data['fe'] else '未吸收固定效应'}，N={f.data['n']}）")
+        out.append("")
+        out.append(md_table(["变量", "VIF", "R²"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有共线性诊断_"
+
+
 def robustness_md(F: Findings) -> str:
     """安慰剂与留一法。"""
     out = []
@@ -102,6 +153,9 @@ def summary_text(F: Findings) -> str:
 def report_md(F: Findings) -> str:
     parts = [f"# {F.spec_name}", "", f"spec hash `{F.spec_hash}`；方法 `{F.meta.get('method')}`；"
              f"窗口口径 `{F.meta.get('car_mode')}`", "", "## 样本流", "", sample_flow_md(F.sample_flow),
+             "", "## 描述统计", "", describe_md(F),
+             "", "## 相关矩阵", "", corr_md(F),
+             "", "## 共线性", "", vif_md(F),
              "", "## 组间差异", "", group_diff_md(F),
              "", "## 回归", "", reg_md(F),
              "", "## 稳健性", "", robustness_md(F), ""]

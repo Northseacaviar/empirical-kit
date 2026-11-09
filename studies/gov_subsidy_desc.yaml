@@ -1,0 +1,27 @@
+name: gov-subsidy-descriptive
+# 第 4/5/6 段：描述统计、相关矩阵、共线性
+data:
+  panel: D:/gov-subsidy-stock-paper/data/analysis_sample.csv
+  scale: 100
+  scale_vars: [car]
+  unit: "%"
+sample:
+  derive:
+    - name: zero_lev
+      expr: "lev_w > 0.6"
+tests:
+  - describe:
+      id: desc_main
+      vars: [car_m3_3, log_amount, size, lev_w, roa_w, growth_w, cash_w, soe, age]
+  - describe:
+      id: desc_by_disclose
+      vars: [car_m3_3, log_amount, size]
+      by: disclosed_class
+  - corr:
+      id: corr_main
+      vars: [car_m3_3, log_amount, size, lev_w, roa_w, growth_w]
+  - vif:
+      id: vif_main
+      vars: [log_amount, size, lev_w, roa_w, growth_w, cash_w, soe, age]
+      fe: [industry1, year]
+output_dir: D:/empirical-kit/examples/gov-subsidy/output_desc

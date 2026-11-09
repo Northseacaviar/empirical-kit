@@ -7,6 +7,7 @@ from __future__ import annotations
 import pandas as pd
 
 from .data import SampleFlow, load_cross_section, load_market, load_prices, read_table
+from .vars import evaluate
 from .estimate.event import build_event_panel
 from .spec import StudySpec
 
@@ -60,9 +61,11 @@ def build_sample(spec: StudySpec, event_date: str | None = None,
 
     for d in spec.sample.derive:
         try:
-            v = df.eval(d.expr)
+            v = evaluate(d.expr, df)
         except Exception as exc:
             raise ValueError(f"派生变量 {d.name} 无法求值：{d.expr}（{exc}）") from exc
+        if not isinstance(v, pd.Series):
+            v = pd.Series(v, index=df.index)
         if getattr(v, "dtype", None) == bool:
             v = v.astype(int)
         df[d.name] = v

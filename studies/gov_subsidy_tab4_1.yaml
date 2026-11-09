@@ -2,7 +2,8 @@ name: gov-subsidy-tab4-1
 # 复现表 4-1：主样本五个窗口的累计异常收益
 data:
   panel: D:/gov-subsidy-stock-paper/data/analysis_sample.csv
-  scale: 100          # 源数据是小数，报告成百分点
+  scale: 100
+  scale_vars: [car]          # 源数据是小数，报告成百分点
   unit: "%"
 tests:
   - mean_test: {var: car_m3_3, id: tab4_1_m3_3}

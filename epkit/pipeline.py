@@ -8,8 +8,10 @@ import time
 from pathlib import Path
 
 from .checks.group import group_diff
+from .checks.desc import corr, describe
 from .checks.leave_one import leave_one_out
 from .checks.mean import mean_test
+from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.reg import reg
 from .findings import Finding, Findings
@@ -47,13 +49,26 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
             F.add(group_diff(df, c["var"], c["by"], fid=c.get("id"),
                              min_n=c.get("min_n", 30), winsor=c.get("winsor"),
                              drop_where=c.get("drop_where"),
-                             scale=spec.data.scale, unit=spec.data.unit))
+                             scale=spec.scale_for(c["var"]), unit=spec.data.unit))
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
+        elif "describe" in t:
+            c = t["describe"]
+            F.add(describe(df, c["vars"], fid=c.get("id"), by=c.get("by"),
+                           scale=spec.data.scale, scale_fn=spec.scale_for))
+        elif "corr" in t:
+            c = t["corr"]
+            F.add(corr(df, c["vars"], fid=c.get("id"), method=c.get("method", "pearson"),
+                       threshold=c.get("threshold", 0.8)))
+        elif "vif" in t:
+            c = t["vif"]
+            F.add(vif(df, c["vars"], fid=c.get("id"), fe=c.get("fe"),
+                      warn_at=c.get("warn_at", 10.0)))
         elif "mean_test" in t:
             c = t["mean_test"]
             F.add(mean_test(df, c["var"], fid=c.get("id"), min_n=c.get("min_n", 30),
-                            by=c.get("by"), scale=spec.data.scale, unit=spec.data.unit))
+                            by=c.get("by"), scale=spec.scale_for(c["var"]),
+                            unit=spec.data.unit))
         elif "leave_one_out" in t:
             c = t["leave_one_out"]
             F.add(leave_one_out(df, c["var"], c["by"], fid=c.get("id")))
@@ -62,7 +77,7 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
                                verbose=verbose))
         else:
             F.add(Finding(str(list(t))[:40], "unknown", "fail",
-                          f"未知检验类型：{list(t)}；支持的：group_diff / reg / placebo / leave_one_out / mean_test"))
+                          f"未知检验类型：{list(t)}；支持的：group_diff / reg / placebo / leave_one_out / mean_test / describe / corr / vif"))
 
     F.meta["elapsed_s"] = round(time.time() - t0, 2)
     F.meta["n_final"] = int(len(df))
