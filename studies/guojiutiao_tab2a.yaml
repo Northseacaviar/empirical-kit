@@ -34,4 +34,6 @@ tests:
   # 稳健性：缩尾 1%/99%
   - group_diff: {var: car_0_5, by: zero_div, id: rob_5d_winsor, winsor: [0.01, 0.99]}
   - group_diff: {var: car_0_60, by: zero_div, id: rob_60d_winsor, winsor: [0.01, 0.99]}
+  - leave_one_out: {var: car_0_5, by: zero_div, id: loo_5d}
+  - placebo: {id: placebo_5d, var: car_0_5, by: zero_div, n: 10, gap: 20}
 output_dir: D:/empirical-kit/examples/guojiutiao/output
