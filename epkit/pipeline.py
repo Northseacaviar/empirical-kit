@@ -105,7 +105,9 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
     for t in spec.tests:
         if "group_diff" in t:
             c = t["group_diff"]
-            F.add(group_diff(df, c["var"], c["by"], fid=c.get("id"), min_n=c.get("min_n", 30)))
+            F.add(group_diff(df, c["var"], c["by"], fid=c.get("id"),
+                             min_n=c.get("min_n", 30), winsor=c.get("winsor"),
+                             drop_where=c.get("drop_where")))
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
         else:

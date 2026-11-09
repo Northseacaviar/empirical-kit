@@ -21,6 +21,26 @@ python -m epkit run studies/your.yaml
 
 输出：`findings.json`（结构化结果 + 样本流 + provenance）、`report.md`（表）。
 
+## Regression
+
+```yaml
+tests:
+  - reg:
+      id: h2
+      y: car_m3_3
+      x: [disclosed_asset, log_amount, "log_amount:lev_w"]  # 支持交互项
+      controls: [size, lev_w, roa_w]
+      fe: [industry1, year]
+      cluster: [sec_code, announcement_date]   # 自动出 iid/hetero/个体/时间/双向
+      focus: "log_amount:lev_w"                # 结论看哪个系数
+```
+
+五套推断口径一次跑全；任一模式与其他模式在 5% 水平上结论不一致，结果标 `warn` 并写明哪两个口径、各是什么 t 值。聚类数 < 30 也标 `warn`。
+
+已算好面板的课题跳过 CAR 计算：把 `data.panel` 指向 CSV（含因变量、解释变量、固定效应列、聚类列），`event` 可省。
+
+IV：`x: [exog]` + `iv: {endog: [x], instruments: [z]}`。
+
 ## Spec
 
 ```yaml
@@ -47,7 +67,15 @@ tests:
   - group_diff: {var: car_0_5, by: zero_div}
 ```
 
-`car_mode` 与主检验口径（Welch / 等方差）都会写进每条结果，换口径不会静默。
+组间差异检验支持就地做稳健性，不必另写脚本：
+
+```yaml
+- group_diff: {var: car_0_5, by: zero_div, id: base}
+- group_diff: {var: car_0_5, by: zero_div, id: winsor, winsor: [0.01, 0.99]}
+- group_diff: {var: car_0_5, by: zero_div, id: ex_big, drop_where: "lncap > 25"}
+```
+
+`car_mode` 与主检验口径（Welch / 等方差）、缩尾区间、剔除条件都会写进每条结果，换口径不会静默。
 
 ## Test
 
@@ -59,7 +87,8 @@ python -m pytest tests/ -q
 
 ## Status
 
-事件研究主线可用：CAR（三种基准、两种窗口口径）、样本流、组间差异检验、结构化输出。
+事件研究 + 横截面回归可用：CAR（三种基准、两种窗口口径）、样本流、组间差异、OLS/FE/IV + 五套推断口径、结构化输出。
+检查库（安慰剂、缩尾、留一、聚类敏感性网格）在 M3。
 条件：pandas 3.x / Python 3.12。
 
 作者：[@Northseacaviar](https://github.com/Northseacaviar)

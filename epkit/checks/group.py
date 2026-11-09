@@ -14,8 +14,34 @@ from ..findings import Finding
 
 
 def group_diff(df: pd.DataFrame, var: str, group: str, fid: str | None = None,
-               min_n: int = 30) -> Finding:
-    d = df[[var, group]].dropna()
+               min_n: int = 30, winsor: list[float] | None = None,
+               drop_where: str | None = None) -> Finding:
+    """组间均值差。
+
+    winsor     : [lo, hi] 分位点，先缩尾再检验（记原作 vs 缩尾后两个差）
+    drop_where : pandas query，先剔除再检验（稳健性：去掉大市值、ST、次新等）
+    """
+    fid = fid or f"diff_{var}_by_{group}"
+    missing = [c for c in (var, group) if c not in df.columns]
+    if missing:
+        near = [c for c in df.columns if any(m.split("_")[0] in c for m in missing)][:8]
+        return Finding(fid, "group_diff", "fail",
+                       f"列不存在：{missing}；可能是 {near}",
+                       {"var": var, "by": group, "missing": missing, "n_cols": len(df.columns)})
+
+    d = df.copy()
+    n_raw = len(d)
+    note = ""
+    if drop_where:
+        mask = d.eval(drop_where).fillna(False).astype(bool)
+        d = d[~mask]
+        note = f"；先剔除 {n_raw - len(d)} 条（{drop_where}）"
+    d = d[[var, group]].dropna()
+    if winsor:
+        lo, hi = winsor
+        a, b = d[var].quantile(lo), d[var].quantile(hi)
+        d[var] = d[var].clip(a, b)
+        note += f"；缩尾到 [{a:.3f}, {b:.3f}]"
     fid = fid or f"diff_{var}_by_{group}"
     # 组顺序固定为取值升序：否则 diff 的符号取决于数据里谁先出现，
     # 同一份数据换个行序就会把"负效应"读成"正效应"。
@@ -60,8 +86,11 @@ def group_diff(df: pd.DataFrame, var: str, group: str, fid: str | None = None,
         "t_equal": float(t_eq), "p_equal": float(p_eq),
         "t_welch": float(t_w), "p_welch": float(p_w), "ci95_welch": [float(ci[0]), float(ci[1])],
         "unit": "pp" if var.startswith("car") else "",
+        "n_before_robustness": n_raw,
+        "winsor": winsor,
+        "drop_where": drop_where,
     }
-    why = (f"差 = {levels[1]} - {levels[0]}：{diff:.3f}，t={t_main:.2f}（Welch，组 n={len(g0)}/{len(g1)}）")
+    why = (f"差 = {levels[1]} - {levels[0]}：{diff:.3f}，t={t_main:.2f}（Welch，组 n={len(g0)}/{len(g1)}）{note}")
     if data["unit"]:
         why += "，单位 个百分点"
     return Finding(fid, "group_diff", status, why, data, warnings=warnings)
