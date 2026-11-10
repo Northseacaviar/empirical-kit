@@ -161,6 +161,50 @@ def robustness_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有稳健性检验_"
 
 
+def mediation_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "mediation"]
+    out = []
+    for f in items:
+        for r in f.data.get("rows", []):
+            out.append(f"**{f.id}**：{f.data['x']} → {f.data['y']}，中介变量 {r['m']}"
+                       f"（bootstrap {r['n_boot_ok']} 次）")
+            out.append("")
+            rows = [
+                ["a：x → m", f"{r['a']['coef']:+.4f}", f"({r['a']['se']:.4f})", f"{r['a']['p']:.3f}"],
+                ["b：m → y|x", f"{r['b']['coef']:+.4f}", f"({r['b']['se']:.4f})", f"{r['b']['p']:.3f}"],
+                ["c：总效应", f"{r['c']['coef']:+.4f}", f"({r['c']['se']:.4f})", f"{r['c']['p']:.3f}"],
+                ["c′：直接效应", f"{r['c_prime']['coef']:+.4f}", f"({r['c_prime']['se']:.4f})",
+                 f"{r['c_prime']['p']:.3f}"],
+                ["ab：间接效应", f"{r['ab']:+.4f}", f"({r['ab_se']:.4f})",
+                 f"CI [{r['ci_low']:+.4f}, {r['ci_high']:+.4f}]"],
+            ]
+            out.append(md_table(["路径（Baron-Kenny 三步）", "系数", "标准误", "p / 区间"], rows))
+            out.append("")
+            out.append(f"中介比例 ab/c = {r['share']:.1%}")
+            out.append("")
+    return "\n".join(out) if out else "_没有中介效应结果_"
+
+
+def group_test_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "group_test"]
+    out = []
+    for f in items:
+        d = f.data
+        if not d.get("groups") or d.get("coef_low") is None:
+            out.append(f"_{f.id}：{f.why}_")
+            out.append("")
+            continue
+        rows = [[f"{d['by']}={d['groups'][0]}", f"{d['coef_low']:+.4f}", "-", "-"],
+                [f"{d['by']}={d['groups'][1]}", f"{d['coef_high']:+.4f}", "-", "-"],
+                ["差（交互项）", f"{d['diff']:+.4f}", f"({d['se_diff']:.4f})",
+                 f"F={d['f']:.2f}, p={d['p_f']:.4f}"]]
+        out.append(f"**{f.id}**：{d['x']} → {d['y']} 按 {d['by']} 分组（N={d['n']}）")
+        out.append("")
+        out.append(md_table(["分组", "系数", "标准误", "差异检验"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有跨组系数检验_"
+
+
 def tobit_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "tobit"]
     out = []
@@ -353,6 +397,8 @@ def report_md(F: Findings) -> str:
              "", "## 子样本", "", subsample_md(F),
              "", "## 分位回归", "", quantile_md(F),
              "", "## Tobit", "", tobit_md(F),
+             "", "## 中介效应", "", mediation_md(F),
+             "", "## 跨组系数差异", "", group_test_md(F),
              "", "## 多重检验校正", "", multitest_md(F),
              "", "## 稳健性", "", robustness_md(F), ""]
     warns = [f for f in F.items if f.status != "ok"]

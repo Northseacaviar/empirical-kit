@@ -11,6 +11,8 @@ from .checks.group import group_diff
 from .checks.desc import corr, describe
 from .checks.leave_one import leave_one_out
 from .checks.mean import mean_test
+from .checks.group_test import group_test
+from .checks.mediation import mediation
 from .checks.multitest import collect_p, multitest
 from .checks.confound import confound
 from .checks.density import density
@@ -20,9 +22,11 @@ from .data_sources.csmar import audit_units
 from .checks.quantile import quantile
 from .checks.spec_curve import spec_curve
 from .checks.subsample import subsample
+from .checks.trend_box import box_plot, trend
 from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.did import did
+from .estimate.inference import inference, permutation
 from .estimate.reg import reg
 from .estimate.tobit import tobit
 from .findings import Finding, Findings
@@ -63,6 +67,8 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
 
     # 多重检验校正依赖其他检验的结果，所以放在整轮之后跑，spec 里的书写顺序不影响。
     pending_multitest = []
+    # 回归设定登记表：bootstrap / 置换检验用 from 引用已写好的那条 reg
+    reg_registry: dict[str, dict] = {}
 
     for t in spec.tests:
         if "multitest" in t:
@@ -76,6 +82,7 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
                              scale=spec.scale_for(c["var"]), unit=spec.data.unit))
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
+            reg_registry.setdefault(t["reg"].get("id", "reg"), t["reg"])
         elif "tobit" in t:
             F.add(tobit(df, t["tobit"]))
         elif "did" in t:
@@ -109,8 +116,20 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
             F.add(pileup(df, t["pileup"]))
         elif "reliability" in t:
             F.add(reliability(df, t["reliability"]))
+        elif "trend" in t:
+            F.add(trend(df, t["trend"]))
+        elif "box" in t:
+            F.add(box_plot(df, t["box"]))
         elif "density" in t:
             F.add(density(df, t["density"]))
+        elif "inference" in t:
+            F.add(inference(df, t["inference"], reg_registry))
+        elif "permutation" in t:
+            F.add(permutation(df, t["permutation"], reg_registry))
+        elif "mediation" in t:
+            F.add(mediation(df, t["mediation"]))
+        elif "group_test" in t:
+            F.add(group_test(df, t["group_test"]))
         elif "spec_curve" in t:
             F.add(spec_curve(df, t["spec_curve"]))
         elif "subsample" in t:

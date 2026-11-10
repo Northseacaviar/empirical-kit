@@ -42,8 +42,11 @@ def _apply_merges(df: pd.DataFrame, spec: StudySpec, flow: SampleFlow) -> pd.Dat
         if not path.exists():
             raise FileNotFoundError(f"合并表不存在：{path}")
         right = read_table(path, encoding=spec.data.encoding, column_map=spec.data.column_map)
+        # 只对「看起来是证券代码」的连接键补零。对 [code, year] 里的 year 也补零
+        # 会把 2018 变成 002018——图上的横轴直接变成乱码。
+        CODE_HINTS = ("code", "stkcd", "symbol", "secucode", "stock")
         for k in m.on:
-            if k in right.columns and k in df.columns:
+            if k in right.columns and k in df.columns and any(h in str(k).lower() for h in CODE_HINTS):
                 right[k] = _norm_code(right[k])
                 df[k] = _norm_code(df[k])
         missing_key = [c for c in m.on if c not in right.columns or c not in df.columns]

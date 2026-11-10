@@ -1,0 +1,66 @@
+name: coverage-v2
+# 覆盖 v2 新能力：多表合并、logit、tobit、中介、跨组差异、bootstrap/置换、两张新图
+data:
+  panel: examples/coverage_v2/main.csv
+  merge:
+    - with: examples/coverage_v2/fin.csv
+      on: [code, year]
+      how: left
+      keep: [roa, lev]
+      validate: many_to_one
+      min_match: 0.9
+tests:
+  - reg:
+      id: h2
+      y: y
+      x: [treat]
+      controls: [size, roa]
+      fe: [year]
+      cluster: [code]
+  - reg:
+      id: logit_violate
+      y: violate
+      x: [treat]
+      controls: [size]
+      model: logit
+      fe: [year]
+      cluster: [code]
+      marginals: true
+  - tobit:
+      id: tb
+      y: y_cens
+      x: [treat]
+      controls: [size]
+      tobit: {lower: 0}
+  - mediation:
+      id: med
+      y: y
+      x: treat
+      m: [roa]
+      controls: [size]
+      boot: 99
+      seed: 7
+      cluster: [code]
+  - group_test:
+      id: chow
+      y: y
+      x: [treat]
+      by: soe
+      controls: [size, roa]
+      cluster: [code]
+  - inference:
+      id: boot_h2
+      from: h2
+      type: wild_cluster
+      n: 199
+      seed: 7
+  - permutation:
+      id: perm_h2
+      from: h2
+      n: 199
+      seed: 7
+  - trend: {id: tr, var: y, by: year, group: soe}
+  - box: {id: bx, var: y, by: soe}
+  - corr: {id: corr, vars: [y, size, roa]}
+  - multitest: {id: mt, method: bh}
+output_dir: examples/coverage_v2/output
