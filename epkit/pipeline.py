@@ -98,7 +98,10 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
             c = t["leave_one_out"]
             F.add(leave_one_out(df, c["var"], c["by"], fid=c.get("id")))
         elif "confound" in t:
-            F.add(confound(spec, t["confound"]))
+            cfg_c = dict(t["confound"])
+            if "sample_codes" not in cfg_c and "code" in df.columns:
+                cfg_c["sample_codes"] = df["code"].dropna().unique().tolist()
+            F.add(confound(spec, cfg_c))
         elif "pileup" in t:
             F.add(pileup(df, t["pileup"]))
         elif "reliability" in t:

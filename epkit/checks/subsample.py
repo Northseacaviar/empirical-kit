@@ -52,9 +52,10 @@ def subsample(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
     fml = f"{y} ~ 1 + " + " + ".join(rhs)
     if fe:
         fml += " | " + " + ".join(fe)
-    vcov = None
-    if clusters:
-        vcov = {"CRV1": clusters[0]} if len(clusters) == 1 else {"CRV1": "+".join(clusters)}
+    # 没有聚类列时退回异方差稳健，而不是 pyfixest 默认的 iid——
+    # 否则「主表聚类、子样本表 iid」就是典型的口径漂移
+    vcov = ({"CRV1": clusters[0]} if len(clusters) == 1 else {"CRV1": "+".join(clusters)}) \
+        if clusters else "hetero"
 
     rows, errors = [], []
     for v in sorted(vals, key=lambda z: str(z)):
@@ -66,7 +67,7 @@ def subsample(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
             rows.append(rec)
             continue
         try:
-            m = pf.feols(fml, data=sub, vcov=vcov) if vcov else pf.feols(fml, data=sub)
+            m = pf.feols(fml, data=sub, vcov=vcov)
             td = m.tidy()
             if x not in td.index:
                 rec.update({"coef": None, "note": "系数未提取"})
@@ -104,4 +105,5 @@ def subsample(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
            f"系数 {coefs.min():+.4f} ~ {coefs.max():+.4f}，显著 {len(sig)} 组")
     return Finding(fid, "subsample", status, why,
                    {"y": y, "x": x, "by": cfg["by"], "rows": rows,
+                    "vcov": vcov if isinstance(vcov, str) else "cluster",
                     "formula": fml}, warnings=warnings)

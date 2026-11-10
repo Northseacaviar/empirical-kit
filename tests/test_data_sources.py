@@ -60,10 +60,17 @@ def test_detect_units_gives_up_on_short_series():
     assert detect_return_units(pd.Series([0.01, 0.02])) is None
 
 
-def test_audit_flags_decimal_without_scale():
+def test_audit_flags_decimal_declared_as_percent():
+    # 声明按 % 报告、数据却是小数、又没写 scale：这是真矛盾
     df, _ = normalize(csmar_like())
-    notes = audit_units(df, scale=1.0, unit="")
+    notes = audit_units(df, scale=1.0, unit="%")
     assert any("小数口径" in n and "scale: 100" in n for n in notes), notes
+
+
+def test_audit_stays_quiet_on_default_decimal():
+    # 小数 + scale=1 + 没声明单位 = 本工具默认约定，不该每次报警
+    df, _ = normalize(csmar_like())
+    assert audit_units(df, scale=1.0, unit="") == []
 
 
 def test_audit_flags_double_scaling():
@@ -76,7 +83,7 @@ def test_audit_flags_double_scaling():
 def test_audit_checks_car_columns_too():
     # 小数口径的 CAR：标准差 0.03，也就是 3 个百分点
     df = pd.DataFrame({"car_0_5": np.random.default_rng(2).normal(0, 0.03, 400)})
-    notes = audit_units(df, scale=1.0, unit="")
+    notes = audit_units(df, scale=1.0, unit="pp")
     assert any("car_0_5" in n for n in notes), notes
 
 

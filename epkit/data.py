@@ -116,7 +116,11 @@ def load_prices(spec: StudySpec) -> dict[str, pd.DataFrame]:
                 if conv.notna().mean() > 0.9:
                     df[c] = conv
         if close_col in df.columns:
+            before = len(df)
             df = df[df[close_col].notna() & (df[close_col] > 0)]
+            if before - len(df) > 0:
+                # 停牌行在这里被丢掉；事件窗口可能因此短一天，至少要留痕
+                print(f"  · 价格表丢弃 {before - len(df)} 行无有效收盘价（停牌/缺数据）")
         return df.set_index(date_col).sort_index()
 
     out: dict[str, pd.DataFrame] = {}

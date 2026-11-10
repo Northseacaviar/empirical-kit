@@ -102,10 +102,12 @@ def audit_units(df: pd.DataFrame, scale: float = 1.0,
         if u is None:
             continue
         med = float(pd.to_numeric(df[c], errors="coerce").abs().median())
-        if u == "decimal" and scale == 1.0:
+        # 小数数据 + scale=1、且没声明单位：这是默认约定，不算问题（否则每份 A 股面板都报一条，warn 就失去意义）。
+        # 只有「声明按百分点报告（unit=%/pp）却没写 scale」这种真矛盾才报。
+        if u == "decimal" and scale == 1.0 and unit in ("%", "pp"):
             notes.append(
-                f"{c} 看起来是小数口径（中位 |{c}|={med:.4f}），而 spec 没有换算系数："
-                f"若后续按百分点解读会差 100 倍，需要时写 data.scale: 100")
+                f"{c} 是小数口径（中位 |{c}|={med:.4f}），但 spec 声明单位是 {unit!r} 却没写 "
+                "data.scale: 100——按百分点解读会差 100 倍")
         elif u == "percent" and scale not in (1.0, None):
             notes.append(
                 f"{c} 看起来已经是百分点口径（中位 |{c}|={med:.4f}），"
