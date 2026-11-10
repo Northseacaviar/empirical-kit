@@ -9,14 +9,21 @@ Spec-driven empirical toolkit for research agents.
 
 ```
 uv venv --python 3.12 .venv
-uv pip install --python .venv/Scripts/python.exe pandas numpy scipy statsmodels pyfixest pydantic pyyaml jinja2 matplotlib openpyxl
+uv pip install --python .venv/Scripts/python.exe pandas numpy scipy statsmodels pyfixest pydantic pyyaml jinja2 matplotlib openpyxl python-docx baostock
 ```
 
 ## Use
 
 ```
 python -m epkit validate studies/your.yaml
-python -m epkit run studies/your.yaml
+python -m epkit run studies/your.yaml [--out DIR] [--quiet] [--no-docx]
+
+# 取数（baostock，前复权默认）
+python -m epkit fetch --codes 600000,000001 --start 2023-01-01 --end 2024-06-30 --out data/prices
+python -m epkit fetch --codes sh.000300 --start 2023-01-01 --end 2024-06-30 --out data/index.csv --index
+
+# 导出表列名对齐（CSMAR）
+python -m epkit map-columns --in raw.xlsx --out mapped.csv --mapping csmar
 ```
 
 输出：
@@ -24,11 +31,31 @@ python -m epkit run studies/your.yaml
 ```
 output/
   findings.json     结构化结果：每条带 status(ok/warn/fail)、why、spec hash、样本 n
-  report.md         样本流表、组间差异表、回归表、稳健性表
-  figures/          期限结构图、安慰剂图（仅在有对应结果时生成）
+  report.md         全部表
+  report.docx       三线表：系数在上、标准误在下
+  figures/          期限结构、安慰剂、事件研究、规格曲线、分布图（有对应结果才生成）
 ```
 
 安装成命令（可选）：`uv pip install -e .`，之后用 `epkit run ...`。
+
+## Tests supported
+
+| 类型 | 作用 |
+|---|---|
+| `group_diff` | 两组均值差 + Welch / 等方差 t，可就地缩尾、剔除 |
+| `mean_test` | 单样本均值检验、中位数、正收益占比 |
+| `reg` | OLS / FE / IV，五套推断口径一次给全；IV 附第一阶段聚类 F 与过度识别检验 |
+| `did` | 动态效应、预趋势 Wald；交错处理自动给 CS 估计量与 2x2 配对诊断 |
+| `describe` / `corr` / `vif` | 描述统计（含分位）、相关矩阵、共线性 |
+| `density` | 偏度、峰度、尾部占比 + 分布图 |
+| `spec_curve` | 同一系数在多组控制变量 / 固定效应 / 推断口径下的分布 |
+| `subsample` | 按年、按行业或任意分组重跑主回归 |
+| `quantile` | 分位数回归（固定效应用组内去均值近似） |
+| `multitest` | BH / Holm / Bonferroni，报校正前后的显著条数 |
+| `leave_one_out` / `placebo` | 留一法、时间安慰剂 |
+| `confound` | 窗口内混杂事件筛查 |
+| `pileup` | 阈值处密度不连续 |
+| `reliability` | 双编码信度（Krippendorff alpha） |
 
 ## Robustness
 
@@ -37,7 +64,7 @@ output/
 - placebo: {var: car_0_5, by: zero_div, n: 10, gap: 20}   # 自动取事件日前的非事件锚点
 ```
 
-安慰剂输出 z =（事件日差 − 锚点均值）/ 锚点标准差，|z| < 1.96 判 `warn`：同一套口径在随便哪天也能复制出相近的组间差。留一法给最敏感单点的位移占原差的比例，超过 20% 判 `warn`。
+安慰剂输出 z =（事件日差 - 锚点均值）/ 锚点标准差，|z| < 1.96 判 `warn`。留一法给最敏感单点的位移占原差的比例，超过 20% 判 `warn`。
 
 ## Regression
 
@@ -47,7 +74,7 @@ tests:
       id: h2
       y: car_m3_3
       x: [disclosed_asset, log_amount, "log_amount:lev_w"]  # 支持交互项
-      controls: [size, lev_w, roa_w]
+      controls: [[size], [size, lev_w, roa_w]]              # 多层阶梯
       fe: [industry1, year]
       cluster: [sec_code, announcement_date]   # 自动出 iid/hetero/个体/时间/双向
       focus: "log_amount:lev_w"                # 结论看哪个系数
@@ -67,11 +94,13 @@ data:
   prices: data/px            # 目录（每票一个 csv）或单个长表
   cross_section: data/xs.csv # 样本框 / 横截面变量
   index: data/index.csv      # 市场基准（method != raw 时必需）
+  column_map: csmar          # 可选：CSMAR 导出表列名映射
+  scale: 100                 # 可选：数据是小数时换算成百分点
 event:
   mode: single               # single | column | list
   date: "2024-04-12"
 returns:
-  method: raw                # raw | market_adjusted | market_model
+  method: market_model       # raw | market_adjusted | market_model
   car_mode: sum_daily        # sum_daily | close_to_close，二者相差一日
   windows: [[-1, 1], [0, 5]]
 sample:
@@ -83,6 +112,9 @@ sample:
       expr: "div2023 == 0"
 tests:
   - group_diff: {var: car_0_5, by: zero_div}
+  - did: {id: policy, y: y, cohort: cohort, period: year, idvar: firm, window: [-4, 6]}
+  - spec_curve: {id: sc, y: y, x: lnx, controls: [[], [size]], fe: [[], [year]], vcov: [hetero]}
+  - multitest: {id: mt, method: bh}
 ```
 
 组间差异检验支持就地做稳健性，不必另写脚本：
@@ -93,7 +125,9 @@ tests:
 - group_diff: {var: car_0_5, by: zero_div, id: ex_big, drop_where: "lncap > 25"}
 ```
 
-`car_mode` 与主检验口径（Welch / 等方差）、缩尾区间、剔除条件都会写进每条结果，换口径不会静默。
+`car_mode` 与主检验口径（Welch / 等方差）、缩尾区间、剔除条件、推断口径都会写进每条结果，换口径不会静默。
+
+收益率单位在读数时就判（小数 0.008 vs 百分点 0.8，差 100 倍但不报错）：判定结果与 `data.scale` 对不上会进 `unit_audit` 告警。
 
 ## Test
 
@@ -101,13 +135,10 @@ tests:
 python -m pytest tests/ -q
 ```
 
-`tests/test_repro_guojiutiao.py` 用论文表 2A 的 8 个窗口作回归基线。
+`tests/test_repro_*.py` 用两篇已发表论文的表作回归基线（均值差、标准误、t 值、样本量）。
 
 ## Status
 
-已可用：CAR（三种基准 × 两种窗口口径）、样本流、单样本均值检验、组间差异、OLS/FE/IV + 五套推断口径、缩尾、剔除大类、留一法、时间安慰剂、表与图。
-
-复现验收（`tests/`）：两篇已发表论文的表，均值差/标准误/t 值与原文一致。
 条件：pandas 3.x / Python 3.12。
 
 作者：[@Northseacaviar](https://github.com/Northseacaviar)

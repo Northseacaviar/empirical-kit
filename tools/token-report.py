@@ -23,7 +23,7 @@ CONFIG = {
     'db': 'D:/insane-robot/state.db',
     'label': 'empirical-kit',
     'project_dir': 'D:/empirical-kit',
-    'main_sessions': [],        # 例：['20260925_1634']（会话 id 前缀）
+    'main_sessions': ['local-6299a52', 'local-5cb468a2'],   # 上一轮规划 + 本轮补齐
     'keywords': ['empirical-kit', 'epkit', '实证工具'],
     'partial_sessions': [],     # 例：['20260925_1238']
     'partial_hints': [],        # 例：['拉黑', '悬浮']（不给则用 keywords）
