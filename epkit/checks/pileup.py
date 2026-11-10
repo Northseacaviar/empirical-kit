@@ -26,12 +26,19 @@ def pileup(df: pd.DataFrame, cfg: dict) -> Finding:
     cut = float(cfg.get("cut", 0))
     bw = float(cfg.get("bw", 0.05))
     n_bins = int(cfg.get("bins", 20))
+    if n_bins < 8:
+        return Finding(fid, "pileup", "fail",
+                       f"bins={n_bins} 太少：每侧不足 4 个箱，密度比没法估计", 
+                       {"var": var, "cut": cut, "bw": bw, "bins": []})
 
     s = pd.to_numeric(df[var], errors="coerce").dropna()
     near = s[(s >= cut - bw) & (s <= cut + bw)]
     if len(near) < 50:
         return Finding(fid, "pileup", "warn",
-                       f"阈值 ±{bw} 内只有 {len(near)} 个观测，密度检验没有意义", {})
+                       f"阈值 ±{bw} 内只有 {len(near)} 个观测，密度检验没有意义",
+                       {"var": var, "cut": cut, "bw": bw, "n_near": int(len(near)),
+                        "f_left": None, "f_right": None, "theta": None, "z": None,
+                        "p": None, "bins": []})
 
     edges = np.linspace(cut - bw, cut + bw, n_bins + 1)
     cnt, _ = np.histogram(near, bins=edges)
@@ -54,11 +61,20 @@ def pileup(df: pd.DataFrame, cfg: dict) -> Finding:
         cov = s2 * np.linalg.inv(A.T @ A)
         return pred, float(np.sqrt(max(cov[0, 0], 1e-12)))
 
-    fl, sl = _fit_and_predict(left) or (0.0, 1.0)
-    fr, sr = _fit_and_predict(right) or (0.0, 1.0)
-    fl, fr = max(fl, 1e-9), max(fr, 1e-9)
+    lf, rf = _fit_and_predict(left), _fit_and_predict(right)
+    if lf is None or rf is None:
+        return Finding(fid, "pileup", "warn",
+                       f"bins={n_bins} 时每侧不足 2 个箱，无法估计 cut 处的密度",
+                       {"var": var, "cut": cut, "bw": bw, "n_near": int(len(near)),
+                        "f_left": None, "f_right": None, "theta": None, "z": None,
+                        "p": None, "bins": [{"center": float(c), "count": int(m)}
+                                            for c, m in zip(centers, cnt)]})
+    fl = max(float(lf[0]), 1e-9)
+    fr = max(float(rf[0]), 1e-9)
     theta = float(np.log(fr / fl))
-    se = float(np.sqrt((sl / fl) ** 2 + (sr / fr) ** 2))
+    # 计数是泊松量级：SE 用 sqrt(1/c_left + 1/c_right)，不要用线性拟合的截距 OLS SE
+    # （拟合得好时残差≈0，SE→0，z 被高估，实测 5% 名义拒绝率跑到 7.7%）
+    se = float(np.sqrt(1.0 / fl + 1.0 / fr))
     z = theta / se if se > 0 else float("nan")
     p = float(2 * stats.norm.sf(abs(z))) if np.isfinite(z) else float("nan")
 
@@ -70,7 +86,7 @@ def pileup(df: pd.DataFrame, cfg: dict) -> Finding:
                         f"{side}堆积，说明样本在阈值附近不是随机分布的")
         warnings.append("这是「个体能选择自己在阈值哪一侧」的典型迹象，需在正文交代制度与操纵可能性")
 
-    why = (f"阈值 {cut}±{bw}：左侧密度 {fl:.1f}/箱，右侧 {fr:.1f}/箱，"
+    why = (f"阈值 {cut}±{bw}：左侧密度 {fl:.1f}/箱，右侧 {fr:.1f}/箱（SE 用二项近似），"
            f"θ={theta:+.3f}，z={z:.2f}，p={p:.3f}（N={len(near)}）")
     return Finding(fid, "pileup", status, why,
                    {"var": var, "cut": cut, "bw": bw, "n_near": int(len(near)),

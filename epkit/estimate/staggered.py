@@ -51,6 +51,10 @@ def cs_att_gt(d: pd.DataFrame, y: str, idv: str, period: str, cohort: str,
     treated_units = d.loc[d[cohort] != never, [idv, cohort]].drop_duplicates(idv)
     cohorts = sorted(treated_units[cohort].dropna().unique())
     never_ids = set(d.loc[d[cohort] == never, idv].unique())
+    if not never_ids and d[cohort].isna().any():
+        # NaN 编码的 never 会被 `cohort != never` 当成处理组，导致控制组为空、格子静默消失
+        raise ValueError("cohort 里没有 never 组（{never!r}）却有缺失值："
+                         "never-treated 请显式编码（如 0 或 9999），不要用 NaN".format(never=never))
 
     rows = []
     for g in cohorts:
@@ -61,9 +65,11 @@ def cs_att_gt(d: pd.DataFrame, y: str, idv: str, period: str, cohort: str,
             if k == -1:
                 continue
             t1 = g + k
-            # 控制组：从未处理 + 到 t1 仍未处理（g' > t1）
-            late = set(treated_units.loc[treated_units[cohort] > t1, idv])
-            ctrl = never_ids | late
+            # 控制组必须在「t1 与基准期 g-1」两个时点都还没处理——只写 g' > t1 时，
+            # k<0 使 t1<g，处理组自己就落进控制组，ATT 会被按样本比例机械压小。
+            cut = max(t1, base)
+            late = set(treated_units.loc[treated_units[cohort] > cut, idv])
+            ctrl = (never_ids | late) - ids_g
             dy = _long_diff(d, idv, y, period, t1, base)
             if dy.empty:
                 continue
@@ -87,7 +93,8 @@ def cs_att_gt(d: pd.DataFrame, y: str, idv: str, period: str, cohort: str,
         t = att / se if se > 0 else np.nan
         agg = {"att": att, "se": se, "t": float(t),
                "p": float(2 * stats.norm.sf(abs(t))) if np.isfinite(t) else np.nan,
-               "n_cells": len(post), "method": "按处理组规模加权（k>=0）"}
+               "n_cells": len(post), "method": "按处理组规模加权（k>=0）",
+               "se_method": "independent-cells (approx)：忽略格子间协方差，p 偏乐观"}
 
     return {"att_gt": rows, "aggregate": agg,
             "cohorts": [float(c) for c in cohorts],
@@ -101,6 +108,10 @@ def bacon_pairs(d: pd.DataFrame, y: str, idv: str, period: str, cohort: str,
     treated_units = d.loc[d[cohort] != never, [idv, cohort]].drop_duplicates(idv)
     cohorts = sorted(treated_units[cohort].dropna().unique())
     never_ids = set(d.loc[d[cohort] == never, idv].unique())
+    if not never_ids and d[cohort].isna().any():
+        # NaN 编码的 never 会被 `cohort != never` 当成处理组，导致控制组为空、格子静默消失
+        raise ValueError("cohort 里没有 never 组（{never!r}）却有缺失值："
+                         "never-treated 请显式编码（如 0 或 9999），不要用 NaN".format(never=never))
     out = []
 
     def add(kind, g, control_ids, t1, t0, note=""):

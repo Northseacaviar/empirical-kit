@@ -67,22 +67,26 @@ def df_len(df: pd.DataFrame, fe: list[str]) -> int:
     return max(int(len(df) - k), 1)
 
 
-def _sargan(df: pd.DataFrame, uhat: np.ndarray, instruments: list[str],
-            exog: list[str], fe: list[str], n_endog: int) -> dict | None:
-    """Sargan：把 2SLS 残差对工具与外生变量回归，J = n·R²，χ²(q)。"""
+def _sargan(m, instruments: list[str], exog: list[str], fe: list[str],
+            n_endog: int) -> dict | None:
+    """Sargan：把 2SLS 残差对工具与外生变量回归，J = n·R²，χ²(q)。
+
+    残差取模型实际用到的样本（m._data）：FE 丢 singleton 时 m._u_hat 比原始 df 短，
+    直接赋给原始 df 会长度不匹配，异常被吞掉后就成了「没做过度识别检验却报 ok」。
+    """
     from scipy import stats
 
     q = len(instruments) - n_endog
     if q <= 0:
         return None
-    d = df.copy()
-    d["_uhat"] = uhat
-    rhs = instruments + [e for e in exog if e not in instruments]
+    d = m._data.copy()
+    d["_uhat"] = np.asarray(m._u_hat)
+    rhs = instruments + [e for e in exog if e not in instruments and e in d.columns]
     fml = "_uhat ~ 1 + " + " + ".join(rhs)
     if fe:
         fml += " | " + " + ".join(fe)
-    m = pf.feols(fml, data=d)
-    r2 = m._r2_within if fe else m._r2
+    m2 = pf.feols(fml, data=d)
+    m, r2 = m2, (m2._r2_within if fe else m2._r2)
     if r2 is None or not np.isfinite(r2):
         r2 = m._r2
     n = int(m._N)
@@ -115,6 +119,7 @@ def iv_diagnostics(df: pd.DataFrame, cfg: dict) -> dict:
             fs = _first_stage(df, e, instruments, exog_all, fe, clusters)
         except Exception as exc:
             out["notes"].append(f"{e} 的第一阶段估计失败：{type(exc).__name__}: {exc}")
+            out.setdefault("failed_first_stage", []).append(e)
             continue
         fs["weak"] = bool(fs["f"] < 10)
         out["first_stage"].append(fs)
@@ -132,7 +137,7 @@ def iv_diagnostics(df: pd.DataFrame, cfg: dict) -> dict:
         if fe:
             fml += " | " + " + ".join(fe)
         m = pf.feols(fml, data=df)
-        out["sargan"] = _sargan(df, np.asarray(m._u_hat), instruments, exog_all, fe, len(endog))
+        out["sargan"] = _sargan(m, instruments, exog_all, fe, len(endog))
         if out["sargan"] is None:
             out["notes"].append("工具数等于内生变量数：恰好识别，无法做过度识别检验")
         else:
@@ -142,12 +147,26 @@ def iv_diagnostics(df: pd.DataFrame, cfg: dict) -> dict:
         out["notes"].append(f"过度识别检验失败：{type(exc).__name__}: {exc}")
 
     out["notes"].append("排他性约束无法用数据检验，需在正文用制度事实论证")
+    out["overid_needed"] = len(instruments) > len(endog)
     return out
 
 
 def iv_warnings(diag: dict) -> tuple[list[str], bool]:
-    """把诊断翻成 agent 能直接读的告警与状态。"""
+    """把诊断翻成 agent 能直接读的告警与状态。
+
+    原则：诊断没做成 = warn。不能因为「没算出弱工具」就当「工具不弱」。
+    """
     warns, weak_status = [], False
+    failed = diag.get("failed_first_stage") or []
+    if failed:
+        weak_status = True
+        warns.append(f"第一阶段没算出来：{'、'.join(failed)} 的工具在模型里没有变异"
+                     "（常见原因：工具被固定效应吸收、与其它工具共线）——"
+                     "这一项必须修好再写论文，不能当作「工具不弱」")
+    if diag.get("overid_needed") and diag.get("sargan") is None:
+        weak_status = True
+        warns.append("过度识别检验未完成（工具数 > 内生变量数，但 Sargan 没算出来）："
+                     "检查工具是否有变异，或改用 GMM 的 Hansen J")
     for fs in diag.get("first_stage", []):
         if fs["weak"]:
             weak_status = True

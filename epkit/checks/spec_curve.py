@@ -62,8 +62,18 @@ def spec_curve(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
         ctrls, fe, vcov_n, samp = controls[ci], fes[fi], vcovs[vi], samples[si]
         sub = df
         if samp.get("drop_where"):
+            # 与 group_diff 的 drop_where 同义：条件为真的行被剔除。
+            # 之前这里写成 df.query（保留），等于在要剔除的补集上做稳健性，且不报警。
             try:
-                sub = df.query(samp["drop_where"])
+                mask = df.eval(samp["drop_where"]).fillna(False).astype(bool)
+                sub = df[~mask]
+            except Exception:
+                errors += 1
+                continue
+        if samp.get("keep_where"):
+            try:
+                mask = df.eval(samp["keep_where"]).fillna(False).astype(bool)
+                sub = sub[mask]
             except Exception:
                 errors += 1
                 continue
@@ -84,7 +94,8 @@ def spec_curve(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
                 "p": float(td.loc[x, "Pr(>|t|)"]),
                 "n": int(m._N),
                 "controls": ctrls, "fe": fe, "vcov": vcov_n,
-                "sample": samp.get("label", samp.get("drop_where", "")),
+                "sample": samp.get("label") or samp.get("drop_where") or samp.get("keep_where") or "",
+                "n_sample": int(len(sub)),
                 "formula": fml,
             })
         except Exception:
@@ -104,8 +115,12 @@ def spec_curve(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
     elif expect in (-1, "-", "neg"):
         same_sign = float((b < 0).mean())
 
+    # 同一组 controls/fe/样本换不同推断口径，系数完全相同；设定数按「实质设定」计，
+    # 推断敏感性单独报，避免 share_sig 的分母被 vcov 变体悄悄加权
+    distinct = {(tuple(r["controls"]), tuple(r["fe"]), r["sample"]) for r in rows}
     summary = {
-        "n_specs": len(rows), "n_failed": errors,
+        "n_specs": len(distinct), "n_rows": len(rows),
+        "n_vcov_variants": len(vcovs), "n_failed": errors,
         "median": float(np.median(b)), "mean": float(b.mean()),
         "min": float(b.min()), "max": float(b.max()),
         "p10": float(np.percentile(b, 10)), "p90": float(np.percentile(b, 90)),
@@ -123,12 +138,16 @@ def spec_curve(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
     if summary["min"] < 0 < summary["max"]:
         status = "warn"
         warnings.append("系数的符号在不同设定间翻转：这是最需要在正文里交代的情形")
+    if errors:
+        warnings.append(f"{errors} 个设定估计失败已剔除：显著比例的分母是成功的 {len(rows)} 个，"
+                        "失败多了说明设定本身有问题，不是「稳健」")
     if same_sign is not None and same_sign < 0.9:
         status = "warn"
         warnings.append(f"只有 {same_sign:.0%} 的设定符合预期符号")
 
     why = (f"规格曲线 {len(rows)} 个设定：中位系数 {summary['median']:+.4f}"
            f"（{summary['p10']:+.4f} ~ {summary['p90']:+.4f}），"
+           f"实质设定 {summary['n_specs']} 个 × 推断口径 {summary['n_vcov_variants']} 种，"
            f"显著比例 {summary['share_sig']:.0%}"
            + (f"，预期符号占比 {same_sign:.0%}" if same_sign is not None else ""))
     return Finding(fid, "spec_curve", status, why,

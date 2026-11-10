@@ -36,12 +36,15 @@ def density(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
         kurt = float(s.kurt())          # pandas 的 kurt 已是超额峰度
         q01, q99 = s.quantile(0.01), s.quantile(0.99)
         span = float(s.max() - s.min()) or 1.0
-        tail = float(((s < q01) | (s > q99)).mean())
+        # 尾部占比按定义恒为 2%，没有信息量；改用「缩尾前后均值变化占标准差的比例」
+        sd = float(s.std(ddof=1)) or 1.0
+        winsor_gap = float(abs(s.mean() - s.clip(q01, q99).mean()) / sd)
+        tail = winsor_gap
         # 出图要用的直方密度：在这里算一次，图模块只负责画
         counts, edges = np.histogram(s, bins=40, density=True)
         hist = {"edges": [float(e) for e in edges], "density": [float(c) for c in counts]}
         items.append({"var": v, "n": int(len(s)), "skew": skew, "kurt": kurt, "hist": hist,
-                      "p01": float(q01), "p99": float(q99), "tail_share": tail,
+                      "p01": float(q01), "p99": float(q99), "winsor_gap": tail,
                       "mean": float(s.mean()), "median": float(s.median()),
                       "max_min_span": span,
                       "max_over_p99": float(s.max() / q99) if q99 else None})

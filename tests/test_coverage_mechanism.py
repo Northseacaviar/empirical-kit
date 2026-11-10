@@ -38,7 +38,9 @@ CFG = {"y": "y", "x": "x", "controls": [[], ["c1"], ["c1", "c2"]],
 def test_spec_curve_detects_null():
     # 真效应 0：多数设定不应显著，工具应报"对设定敏感"
     f = spec_curve(panel(effect=0.0, seed=2), dict(CFG, id="null"))
-    assert f.data["summary"]["n_specs"] == 18   # 3 控制组 × 3 FE 组合 × 2 推断口径
+    # 3 控制组 × 3 FE 组合 = 9 个实质设定；每种跑 2 套推断口径，共 18 行
+    assert f.data["summary"]["n_specs"] == 9
+    assert f.data["summary"]["n_rows"] == 18
     assert f.data["summary"]["share_sig"] < 0.5, f.data["summary"]
     assert f.status == "warn"
 

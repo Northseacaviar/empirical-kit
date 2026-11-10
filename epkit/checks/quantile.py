@@ -82,6 +82,8 @@ def quantile(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
                         "约为中位系数的 3 倍以上：效应沿分布变化明显")
     if not monotone:
         warnings.append("系数随分位不单调：不要用「越大越受影响」这类线性表述")
+    warnings.append("标准误是 iid 渐近方差（未聚类、未扣固定效应自由度）；"
+                    "面板数据请按聚类口径重算后再说显著性")
     if fe:
         warnings.append("固定效应用组内去均值近似，不是哑变量法的精确解；"
                         "结论只在系数方向与相对大小上可靠")

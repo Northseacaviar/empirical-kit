@@ -31,9 +31,13 @@ def collect_p(F: Findings, fids: list[str] | None = None) -> list[tuple[str, flo
             continue
         d = f.data or {}
         if f.type == "group_diff" and d.get("p_welch") is not None:
-            out.append((f.id, float(d["p_welch"])))
+            pv = float(d["p_welch"])
+            if np.isfinite(pv):
+                out.append((f.id, pv))
         elif f.type == "mean_test" and d.get("p") is not None:
-            out.append((f.id, float(d["p"])))
+            pv = float(d["p"])
+            if np.isfinite(pv):
+                out.append((f.id, pv))
         elif f.type == "reg":
             focus = d.get("focus")
             base = d.get("main_vcov")
@@ -44,7 +48,11 @@ def collect_p(F: Findings, fids: list[str] | None = None) -> list[tuple[str, flo
                 if term.get("p") is not None and np.isfinite(term["p"]):
                     out.append((f"{f.id}:{focus}[{st['label']}]", float(term["p"])))
         elif f.type == "did":
+            # 只收 k>=0：预期间检验的是「平行趋势」，零假设与处理效应不同，
+            # 混进同一个 FDR 族会把真正的效应结论挤掉
             for r in d.get("event_time", []):
+                if r.get("k", -1) < 0:
+                    continue
                 if r.get("p") is not None and np.isfinite(r["p"]):
                     out.append((f"{f.id}:k={r['k']:+d}", float(r["p"])))
     return out
@@ -69,16 +77,23 @@ def multitest(F: Findings, cfg: dict) -> Finding:
     try:
         from statsmodels.stats.multitest import multipletests
         rej, p_adj, _, _ = multipletests(p, alpha=alpha, method=METHODS[method])
-    except Exception:  # 退化为手写 BH，不因为缺依赖交白卷
-        order = np.argsort(p)
+    except Exception:  # 没有 statsmodels 时按 method 各自实现，不能一律按 BH 算
         m = len(p)
-        p_adj = np.empty_like(p)
-        prev = 1.0
-        for rank_pos in range(m - 1, -1, -1):
-            i = order[rank_pos]
-            val = p[i] * m / (rank_pos + 1)
-            prev = min(prev, val)
-            p_adj[i] = min(prev, 1.0)
+        order = np.argsort(p)
+        p_adj = np.empty(m)
+        if method == "bonferroni":
+            p_adj = np.minimum(p * m, 1.0)
+        elif method == "holm":
+            running = 0.0
+            for rank_pos, i in enumerate(order):
+                running = max(running, (m - rank_pos) * p[i])
+                p_adj[i] = min(running, 1.0)
+        else:
+            prev = 1.0
+            for rank_pos in range(m - 1, -1, -1):
+                i = order[rank_pos]
+                prev = min(prev, p[i] * m / (rank_pos + 1))
+                p_adj[i] = min(prev, 1.0)
         rej = p_adj <= alpha
 
     tests = [{"label": lb, "p_raw": float(a), "p_adj": float(b),
@@ -90,13 +105,17 @@ def multitest(F: Findings, cfg: dict) -> Finding:
 
     status = "ok"
     warnings = []
+    if not np.all(np.isfinite(p_adj)):
+        status = "warn"
+        warnings.append("校正后的 p 里有 nan：族内存在无法计算的 p 值，"
+                        "汇总的「校正后显著」条数不可信")
     if flipped:
         status = "warn"
         warnings.append(f"校正后有 {len(flipped)} 条结果由显著转为不显著："
                         + "、".join(flipped[:6]) + ("…" if len(flipped) > 6 else ""))
         warnings.append(f"族内 {len(tests)} 次检验，按 {method} 控 FDR 后显著 {n_adj} 条"
                         f"（未校正 {n_raw} 条）——正文不能只报未校正的结论")
-    why = (f"{method} 校正：族内 {len(tests)} 次检验，未校正显著 {n_raw} 条，"
+    why = (f"{method} 校正：族内 {len(tests)} 次检验（DID 只含 k>=0），未校正显著 {n_raw} 条，"
            f"校正后显著 {n_adj} 条")
     return Finding(fid, "multitest", status, why,
                    {"method": method, "alpha": alpha, "tests": tests,

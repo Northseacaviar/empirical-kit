@@ -26,7 +26,7 @@ CSMAR_MAP = {
     # 收益率（D=日，Y=年，wd=考虑现金红利再投资，nd=不考虑）
     "Dretwd": "ret", "Dretnd": "ret_nd", "Yretwd": "yret", "Yretnd": "yret_nd",
     # 规模与行业
-    "Msmvttl": "lncap_raw", "Mv": "mv", "Dsmvtll": "mv_float",
+    "Msmvttl": "mv_total_raw", "Mv": "mv", "Dsmvtll": "mv_float",
     "Nindcd": "industry", "Nindnme": "industry_name",
     "Indcd": "industry_old", "Indnme": "industry_name_old",
     # 常见公司文件字段
@@ -45,15 +45,36 @@ def normalize(df: pd.DataFrame, mapping: str | dict = "csmar") -> tuple[pd.DataF
     if mapping == "csmar":
         table = CSMAR_MAP
     rename = {k: v for k, v in table.items() if k in df.columns and k != v}
+    dropped, conflicts = [], {}
+    # 多个原始列映射到同一个标准名（CSMAR 合并表常同时给 Stkcd 与 Symbol）：
+    # 直接 rename 会得到两列同名 code，后面 out["code"].str 变成 DataFrame 崩掉。
+    from collections import Counter
+
+    for tgt, cnt in Counter(rename.values()).items():
+        if cnt <= 1:
+            continue
+        srcs = [k for k, v in rename.items() if v == tgt]
+        keep = srcs[0]
+        for k in srcs[1:]:
+            rename.pop(k, None)
+            dropped.append(k)
+        conflicts[tgt] = {"kept": keep, "dropped": srcs[1:]}
     out = df.rename(columns=rename)
     # 代码列去前缀/补零：600000 vs sh.600000 vs 600000.0
     if "code" in out.columns:
-        out["code"] = (out["code"].astype(str).str.strip()
-                       .str.replace(r"\.0$", "", regex=True)
-                       .str.replace(r"^(sh|sz|bj)\.", "", regex=True, case=False))
+        code = (out["code"].astype(str).str.strip()
+                .str.replace(r"\.0$", "", regex=True)
+                .str.replace(r"^(sh|sz|bj)\.", "", regex=True, case=False))
+        # Excel 会把 000001 读成 1；不补零就和 baostock 的 6 位代码 merge 成 0 行
+        is_num = code.str.fullmatch(r"\d+")
+        out["code"] = code.where(~is_num, code.str.zfill(6))
     if "date" in out.columns:
         out["date"] = pd.to_datetime(out["date"], errors="coerce")
-    return out, {"renamed": rename, "mapping": "csmar" if isinstance(mapping, str) else "custom"}
+    info = {"renamed": rename, "mapping": "csmar" if isinstance(mapping, str) else "custom"}
+    if dropped:
+        info["dropped_duplicate_sources"] = dropped
+        info["conflicts"] = conflicts
+    return out, info
 
 
 def detect_return_units(s: pd.Series) -> str | None:

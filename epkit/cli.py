@@ -96,7 +96,14 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out or spec.output_dir)
     out.mkdir(parents=True, exist_ok=True)
     F.save(out / "findings.json")
-    (out / "report.md").write_text(report_md(F), encoding="utf-8")
+    try:
+        (out / "report.md").write_text(report_md(F), encoding="utf-8")
+    except Exception as exc:
+        # 渲染失败也要留一份能读的摘要，不能让目录停在只有 findings.json 的半成品状态
+        print(f"  ! report.md 生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        (out / "report.md").write_text(
+            f"# {F.spec_name}\n\n渲染失败：{type(exc).__name__}: {exc}\n\n```\n"
+            + summary_text(F) + "\n```\n", encoding="utf-8")
     figs = make_all(F, out / "figures")
     docx_path = None
     if not args.no_docx:

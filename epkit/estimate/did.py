@@ -107,12 +107,25 @@ def did(df: pd.DataFrame, cfg: dict) -> Finding:
             for i, n in enumerate(pre):
                 R[i, idx_all.index(n)] = 1
             res = m.wald_test(R=R, distribution="chi2")
-            wt = {"stat": float(res.stat), "p": float(res.pvalue), "df": int(res.df1)}
+            stat, df1 = float(res.stat), int(res.df1)
+            # 聚类稳健 V 按 χ² 查表会低估小样本不确定性（24 聚类实测 10% vs 7%），
+            # 与 iv.py 的第一阶段 F 用同一口径：F = W/df1，df2 = G-1
+            g = int(min(m._G)) if getattr(m, "_G", None) else None
+            if g:
+                from scipy import stats as _st
+
+                df2 = max(g - 1, 1)
+                p_f = float(_st.f.sf(stat / df1, df1, df2))
+            else:
+                df2, p_f = None, float(res.pvalue)
+            wt = {"stat": stat, "p": p_f, "df": df1, "df2": df2,
+                  "distribution": "F" if g else "chi2"}
         except Exception as exc:
             wt = None
 
     post = [r for r in rows if r["k"] >= 0]
-    att = float(np.mean([r["coef"] for r in post])) if post else float("nan")
+    # 全 pre 窗口时没有 post 格，att 置 None 而不是 nan（nan 会进 why 与「同向」判断）
+    att = float(np.mean([r["coef"] for r in post])) if post else None
 
     cohorts = sorted(set(d.loc[d[cohort] != never, cohort].dropna().unique()))
     staggered = len(cohorts) > 1
@@ -132,11 +145,21 @@ def did(df: pd.DataFrame, cfg: dict) -> Finding:
     warnings, status = [], "ok"
     if wt and wt["p"] < 0.05:
         status = "warn"
-        msg = (f"预趋势未通过：k<0 的系数联合检验 p={wt['p']:.4f}")
-        if att_did2s is not None:
-            msg += (f"；但 did2s 汇总 ATT={att_did2s:+.4f} 与 TWFE 动态效应均值 {att:+.4f} "
-                    "同向，更可能是 TWFE 的基准期污染（处理效应抬高组均值，压低了 pre 期残差），"
-                    "不等于识别失败——写论文时要交代这一点并附 did2s 结果")
+        msg = (f"预趋势未通过：k<0 的系数联合检验 p={wt['p']:.4f}"
+               f"（{wt.get('distribution', 'chi2')} 口径）")
+        if staggered and att_did2s is not None and att is not None:
+            # 只有交错处理才存在负权重导致的基准期污染；单队列 DID 里 two 估计量等价，
+            # 预趋势不过就是平行趋势违例，不能拿 did2s 去宽慰
+            gap = abs(att_did2s - att) / abs(att_did2s) if att_did2s else float("nan")
+            if np.sign(att_did2s) == np.sign(att) and gap < 0.25:
+                msg += (f"；did2s 汇总 ATT={att_did2s:+.4f} 与 TWFE {att:+.4f} 相差 {gap:.0%}，"
+                        "差异在 25% 以内，更像 TWFE 动态效应的基准期污染而非识别失败——"
+                        "正文仍要交代平行趋势存疑并附 did2s 结果")
+            else:
+                msg += (f"；did2s 汇总 ATT={att_did2s:+.4f} 与 TWFE {att:+.4f} 相差 {gap:.0%}，"
+                        "两个估计量不一致，这更像真的识别问题")
+        else:
+            msg += "；单队列 DID 没有负权重问题，这条就是平行趋势违例，需在正文交代"
         warnings.append(msg)
     stag = None
     if staggered:
@@ -174,7 +197,9 @@ def did(df: pd.DataFrame, cfg: dict) -> Finding:
     if min(sum(d[n]) for n in present) < 10:
         warnings.append("某些事件时间只有不到 10 个观测，系数不稳")
 
-    why = (f"DID 事件时间 {len(rows)} 期（基准 k=-1），处理后平均效应 {att:+.4f}"
+    why = (f"DID 事件时间 {len(rows)} 期（基准 k=-1）"
+           + (f"，处理后平均效应 {att:+.4f}（k>=0 各格等权，未按处理期长度加权）"
+              if att is not None else "，窗口内没有 post 期")
            + (f"；预趋势联合检验 p={wt['p']:.3f}" if wt else ""))
     return Finding(fid, "did", status, why,
                    {"y": y, "cohort": cohort, "period": period, "window": [lo, hi],

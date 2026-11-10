@@ -220,13 +220,13 @@ def density_md(F: Findings) -> str:
     out = []
     for f in items:
         rows = [[i["var"], i["n"], f"{i['skew']:.2f}", f"{i['kurt']:.2f}",
-                 f"{i['p01']:.3f}", f"{i['p99']:.3f}", f"{i['tail_share']:.2%}"]
+                 f"{i['p01']:.3f}", f"{i['p99']:.3f}", f"{i.get('winsor_gap', 0):.3f}"]
                 for i in f.data["items"] if i.get("skew") is not None]
         if not rows:
             continue
         out.append(f"**{f.id}**：分布诊断（|偏度|>2 或超额峰度>7 判严重偏态）")
         out.append("")
-        out.append(md_table(["变量", "N", "偏度", "超额峰度", "P1", "P99", "尾部占比"], rows))
+        out.append(md_table(["变量", "N", "偏度", "超额峰度", "P1", "P99", "缩尾前后均值差/SD"], rows))
         out.append("")
     return "\n".join(out) if out else "_没有分布诊断_"
 
@@ -235,10 +235,15 @@ def confound_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "confound"]
     out = []
     for f in items:
-        rows = [[e["date"], e["label"], "、".join(e["hits"]) or "无重叠"]
-                for e in f.data["events"]]
-        out.append(f"**{f.id}**：主事件 {f.data['main_event']}，窗口 "
-                   f"{f.data['windows']}")
+        rows = [[e.get("date", "-"), e.get("label", ""),
+                 "、".join(e.get("hits") or []) or "无重叠"]
+                for e in (f.data.get("events") or [])]
+        if not rows:
+            out.append(f"_{f.id}：{f.why}_")
+            out.append("")
+            continue
+        out.append(f"**{f.id}**：主事件 {f.data.get('main_event')}，窗口 "
+                   f"{f.data.get('windows')}")
         out.append("")
         out.append(md_table(["日期", "混杂事件", "落在哪几个窗口"], rows))
         out.append("")
@@ -250,9 +255,13 @@ def pileup_md(F: Findings) -> str:
     out = []
     for f in items:
         d = f.data
-        rows = [[f"{b['center']:.4f}", b["count"]] for b in d["bins"]]
-        out.append(f"**{f.id}**：{d['var']} 在阈值 {d['cut']} 附近的密度"
-                   f"（带宽 ±{d['bw']}，N={d['n_near']}）")
+        rows = [[f"{b['center']:.4f}", b["count"]] for b in (d.get("bins") or [])]
+        if d.get("theta") is None:
+            out.append(f"_{f.id}：{f.why}_")
+            out.append("")
+            continue
+        out.append(f"**{f.id}**：{d.get('var')} 在阈值 {d.get('cut')} 附近的密度"
+                   f"（带宽 ±{d.get('bw')}，N={d.get('n_near')}）")
         out.append("")
         out.append(f"θ={d['theta']:+.3f}，z={d['z']:.2f}，p={d['p']:.3f}"
                    f"（左侧 {d['f_left']:.1f}/箱，右侧 {d['f_right']:.1f}/箱）")

@@ -105,6 +105,19 @@ def three_line_table(doc, headers: list[str], rows: list[list], note: str | None
         _header_underline(hdr[i])
 
     widths = _column_widths(doc, headers, rows)
+    # 同时写 w:gridCol：OOXML 的固定布局以 grid 为准，只写 tcW 时 WPS/LibreOffice
+    # 会按等宽重排，长文本被挤成多行
+    grid = table._tbl.tblGrid
+    if grid is not None:
+        for gc, w in zip(grid.findall(qn("w:gridCol")), widths):
+            gc.set(qn("w:w"), str(int(w.twips)))
+    tblPr = table._tbl.tblPr
+    tw = OxmlElement("w:tblW")
+    tw.set(qn("w:type"), "dxa")
+    tw.set(qn("w:w"), str(int(sum(w.twips for w in widths))))
+    for old in tblPr.findall(qn("w:tblW")):
+        tblPr.remove(old)
+    tblPr.append(tw)
     for row in table.rows:
         for i, c in enumerate(row.cells):
             c.width = widths[i]
@@ -232,6 +245,14 @@ def _sec_multitest(F: Findings):
     items = [f for f in F.items if f.type == "multitest" and f.data.get("tests")]
     if not items:
         return None
+    if len(items) > 1:
+        rows = []
+        for f in items:
+            rows.extend([[t["label"], f"{t['p_raw']:.4f}", f"{t['p_adj']:.4f}",
+                          "是" if t["sig_raw"] else "", "是" if t["sig_adj"] else ""]
+                         for t in f.data["tests"]])
+        return (["检验", "p（未校正）", "p（校正后）", "未校正显著", "校正后显著"], rows,
+                "；".join(f"{f.id} 用 {f.data['method']}" for f in items))
     f = items[0]
     rows = [[t["label"], f"{t['p_raw']:.4f}", f"{t['p_adj']:.4f}",
              "是" if t["sig_raw"] else "", "是" if t["sig_adj"] else ""]
@@ -273,12 +294,18 @@ def report_docx(F: Findings, path: str | Path) -> Path:
         _style_run(doc.add_paragraph().add_run("表 1  组间差异"), size=10, bold=True)
         three_line_table(doc, *sec, note="括号内为样本量；t 用 Welch 口径。")
 
-    for fid, headers, rows in _sec_reg(F):
-        _style_run(doc.add_paragraph().add_run(f"表 2  回归（{fid}）"), size=10, bold=True)
-        three_line_table(doc, headers, rows, note="括号内为聚类稳健标准误。")
+    regs = _sec_reg(F)
+    for i, (fid, headers, rows) in enumerate(regs, start=1):
+        base = next((x.data["main_vcov"] for x in F.items if x.id == fid), None)
+        label = {"iid": "同方差", "hetero": "异方差稳健"}.get(base or "", "聚类稳健")
+        _style_run(doc.add_paragraph().add_run(f"表 2{'' if len(regs) == 1 else i}  回归（{fid}）"),
+                   size=10, bold=True)
+        three_line_table(doc, headers, rows, note=f"括号内为{label}标准误。")
 
-    for fid, headers, rows, note in _sec_did(F):
-        _style_run(doc.add_paragraph().add_run(f"表 3  事件研究（{fid}）"), size=10, bold=True)
+    dids = _sec_did(F)
+    for i, (fid, headers, rows, note) in enumerate(dids, start=1):
+        _style_run(doc.add_paragraph().add_run(f"表 3{'' if len(dids) == 1 else i}  事件研究（{fid}）"),
+                   size=10, bold=True)
         three_line_table(doc, headers, rows, note=note)
 
     mt = _sec_multitest(F)

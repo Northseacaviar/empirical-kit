@@ -36,13 +36,13 @@ def _to_bs_code(code: str) -> str:
     c = str(code).strip().lower()
     if "." in c:
         return c
-    if c.startswith(("6", "9")):
+    if c.startswith(("6", "9", "5")):
         return f"sh.{c}"
-    if c.startswith(("0", "3")):
+    if c.startswith(("0", "3", "1", "2")):
         return f"sz.{c}"
     if c.startswith(("4", "8")):
         return f"bj.{c}"
-    return f"sh.{c}"
+    raise ValueError(f"无法判断交易所：{code!r}（请写成 sh.600000 / sz.000001 形式）")
 
 
 def fetch_one(bs, code: str, start: str, end: str, adjustflag: str = "2") -> pd.DataFrame:
@@ -63,8 +63,11 @@ def fetch_one(bs, code: str, start: str, end: str, adjustflag: str = "2") -> pd.
     # 存成纯 6 位代码：CSMAR 与横截面表用的也是这个形态，后面合并才对得上
     df["code"] = (df["code"].str.split(".", n=1).str[1]
                   if df["code"].str.contains(r"\.").any() else df["code"])
-    # ret 用复权价格算：前复权序列在除权日连续，pctChg 在不复权口径下有跳空
-    df["ret"] = df["close"].pct_change()
+    # ret 用复权价格算：前复权序列在除权日连续，pctChg 在不复权口径下有跳空。
+    # 停牌日 close 为空，pct_change 会断链——连复牌首日的收益也一起丢掉，
+    # 所以先取「上一有效收盘」再算差，停牌日本身仍置 NaN。
+    prev_valid = df["close"].ffill().shift(1)
+    df["ret"] = df["close"] / prev_valid - 1
     df.loc[df["tradestatus"] == 0, "ret"] = pd.NA
     return df
 

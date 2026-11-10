@@ -17,29 +17,69 @@ import pandas as pd
 from ..findings import Finding
 
 
-def krippendorff_alpha(units: list[list], level: str = "nominal") -> float:
-    """units: 每个单元一个列表，含该单元上各编码者的取值（可缺失、可不等长）。"""
-    pairs_total, pairs_disagree = 0.0, 0.0
-    values: list = []
-    for u in units:
-        vals = [v for v in u if v is not None and not (isinstance(v, float) and np.isnan(v))]
-        if len(vals) < 2:
-            continue
-        n = len(vals)
-        pairs_total += n * (n - 1)
-        dis = sum(1 for a, b in itertools.combinations(vals, 2) if a != b)
-        pairs_disagree += dis * 2.0       # 每一对有序两次
-        values.extend(vals)
-    if pairs_total == 0:
-        return float("nan")
-    D_o = pairs_disagree / pairs_total
+def _clean(u: list) -> list:
+    return [v for v in u
+            if v is not None and not (isinstance(v, float) and np.isnan(v))]
 
-    s = pd.Series(values)
-    N = len(s)
-    if N < 2:
+
+def krippendorff_alpha(units: list[list], level: str = "nominal") -> float:
+    """按 coincidence matrix 算 Krippendorff α（nominal / ordinal / interval）。
+
+    为什么用 coincidence matrix 而不是「池化有序对」：每单元编码者数 m_u 不等时
+    （缺失、多编码者），池化写法等价于按 m_u(m_u-1) 加权，会把 α 系统性算高；
+    标准定义是每单元先除以 (m_u-1) 再汇总。
+    """
+    cleaned = [_clean(u) for u in units]
+    vals = [v for u in cleaned for v in u]
+    if not vals:
         return float("nan")
-    vc = s.value_counts()
-    D_e = 1 - float((vc * (vc - 1)).sum()) / (N * (N - 1))
+    try:
+        cats = sorted(set(vals))
+    except TypeError:
+        cats = sorted(set(vals), key=repr)
+    idx = {c: i for i, c in enumerate(cats)}
+    K = len(cats)
+
+    o = np.zeros((K, K))
+    for u in cleaned:
+        m = len(u)
+        if m < 2:
+            continue
+        counts = np.zeros(K)
+        for x in u:
+            counts[idx[x]] += 1
+        for c in range(K):
+            if counts[c] == 0:
+                continue
+            for k in range(K):
+                if counts[k] == 0:
+                    continue
+                if c == k:
+                    o[c, c] += counts[c] * (counts[c] - 1) / (m - 1)
+                else:
+                    o[c, k] += counts[c] * counts[k] / (m - 1)
+    n = float(o.sum())
+    if n < 2:
+        return float("nan")
+    nc = o.sum(axis=1)
+
+    if level == "nominal":
+        def delta(c: int, k: int) -> float:
+            return 0.0 if c == k else 1.0
+    elif level == "interval":
+        def delta(c: int, k: int) -> float:
+            return float((c - k) ** 2)
+    elif level == "ordinal":
+        def delta(c: int, k: int) -> float:
+            lo, hi = min(c, k), max(c, k)
+            span = nc[lo:hi + 1].sum() - (nc[lo] + nc[hi]) / 2.0
+            return float(span ** 2)
+    else:
+        raise ValueError(f"不支持的 level={level!r}；可选 nominal / ordinal / interval")
+
+    D_o = sum(o[c, k] * delta(c, k) for c in range(K) for k in range(K) if c != k) / n
+    D_e = sum(nc[c] * nc[k] * delta(c, k)
+              for c in range(K) for k in range(K) if c != k) / (n * (n - 1))
     if D_e == 0:
         return 1.0 if D_o == 0 else float("nan")
     return float(1 - D_o / D_e)
@@ -55,8 +95,15 @@ def reliability(df: pd.DataFrame, cfg: dict) -> Finding:
     if missing:
         return Finding(fid, "reliability", "fail", f"列不存在：{missing}", {})
 
+    level = cfg.get("level", "nominal")
+    if level not in ("nominal", "ordinal", "interval"):
+        return Finding(fid, "reliability", "fail",
+                       f"不支持的 level={level!r}；当前实现 nominal / ordinal / interval", {})
     units = [[r[c] for c in cols] for _, r in df[cols].iterrows()]
-    alpha = krippendorff_alpha(units, cfg.get("level", "nominal"))
+    try:
+        alpha = krippendorff_alpha(units, level)
+    except ValueError as exc:
+        return Finding(fid, "reliability", "fail", str(exc), {})
     min_alpha = float(cfg.get("min_alpha", 0.8))
     n_units = len(units)
     n_complete = int(df[cols].notna().all(axis=1).sum())
@@ -82,7 +129,7 @@ def reliability(df: pd.DataFrame, cfg: dict) -> Finding:
     why = (f"Krippendorff α={alpha:.3f}（{len(cols)} 个编码者，{n_complete}/{n_units} 单元完整）"
            + (f"，完全一致率 {agree:.1%}" if agree is not None else ""))
     return Finding(fid, "reliability", status, why,
-                   {"alpha": alpha, "level": cfg.get("level", "nominal"),
+                   {"alpha": alpha, "level": level,
                     "coders": cols, "n_units": n_units, "n_complete": n_complete,
                     "agreement": agree, "min_alpha": min_alpha},
                    warnings=warnings)

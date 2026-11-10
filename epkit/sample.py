@@ -80,6 +80,6 @@ def build_sample(spec: StudySpec, event_date: str | None = None,
             except Exception as exc:
                 raise ValueError(f"分组 {g.name} 的表达式无法求值：{g.expr}（{exc}）") from exc
         elif g.values:
-            raise NotImplementedError("values 型分组尚未实现，请用 expr")
+            raise ValueError("values 型分组尚未实现，请用 expr")
 
     return df, flow
