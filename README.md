@@ -9,7 +9,8 @@ Spec-driven empirical toolkit for research agents.
 
 ```
 uv venv --python 3.12 .venv
-uv pip install --python .venv/Scripts/python.exe pandas numpy scipy statsmodels pyfixest pydantic pyyaml jinja2 matplotlib openpyxl python-docx baostock
+uv pip install --python .venv/Scripts/python.exe pandas numpy scipy statsmodels pyfixest[bootstrap] pydantic pyyaml jinja2 matplotlib openpyxl python-docx baostock
+# wild cluster bootstrap 需要：uv pip install wildboottest
 ```
 
 ## Use
@@ -33,7 +34,8 @@ output/
   findings.json     结构化结果：每条带 status(ok/warn/fail)、why、spec hash、样本 n
   report.md         全部表
   report.docx       三线表：系数在上、标准误在下
-  figures/          期限结构、安慰剂、事件研究、规格曲线、分布图（有对应结果才生成）
+  figures/          期限结构、安慰剂、事件研究、规格曲线、分布、趋势、箱线、相关热图
+                    每张图另出一份 *_bw.png（灰度 + 线型，供黑白印刷）
 ```
 
 安装成命令（可选）：`uv pip install -e .`，之后用 `epkit run ...`。
@@ -45,8 +47,15 @@ output/
 | `group_diff` | 两组均值差 + Welch / 等方差 t，可就地缩尾、剔除 |
 | `mean_test` | 单样本均值检验、中位数、正收益占比 |
 | `reg` | OLS / FE / IV，五套推断口径一次给全；IV 附第一阶段聚类 F 与过度识别检验 |
+| `reg: model` | `logit` / `probit` / `poisson`（高维 FE 与聚类口径不变）、`nb`（NB2，无 FE）；离散模型自动给平均边际效应与伪 R² |
+| `tobit` | 删失正态 MLE，支持左右删失；只做低维 FE |
+| `mediation` | Baron-Kenny 三步表 + 间接效应的 bootstrap 区间 |
+| `group_test` | 两组系数差异（交互项，Chow 等价），带 FE 与聚类 |
+| `inference` | wild cluster bootstrap（pyfixest/wildboottest）与 pairs bootstrap |
+| `permutation` | 置换检验：打乱解释变量的经验 p |
+| `trend` / `box` | 时间趋势（分组、95% 区间）与分组箱线；另出黑白印刷版 |
 | `did` | 动态效应、预趋势 Wald；交错处理自动给 CS 估计量与 2x2 配对诊断 |
-| `describe` / `corr` / `vif` | 描述统计（含分位）、相关矩阵、共线性 |
+| `describe` / `corr` / `vif` | 描述统计（含分位）、相关矩阵（自动出热图）、共线性 |
 | `density` | 偏度、峰度、尾部占比 + 分布图 |
 | `spec_curve` | 同一系数在多组控制变量 / 固定效应 / 推断口径下的分布 |
 | `subsample` | 按年、按行业或任意分组重跑主回归 |
@@ -96,6 +105,12 @@ data:
   index: data/index.csv      # 市场基准（method != raw 时必需）
   column_map: csmar          # 可选：CSMAR 导出表列名映射
   scale: 100                 # 可选：数据是小数时换算成百分点
+  merge:                     # 可选：依次并入外部表（财务、治理、行业）
+    - with: data/fin.csv
+      on: [code, year]
+      how: left
+      keep: [roa, lev]
+      validate: many_to_one
 event:
   mode: single               # single | column | list
   date: "2024-04-12"
