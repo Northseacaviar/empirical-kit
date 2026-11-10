@@ -161,6 +161,75 @@ def robustness_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有稳健性检验_"
 
 
+def psm_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type in ("psm", "psm_did")]
+    out = []
+    for f in items:
+        d = f.data
+        if f.type == "psm":
+            out.append(f"**{f.id}**：PSM（{d.get('treat')} → {d.get('y')}，"
+                       f"1:{d.get('ratio')}，卡尺 {d.get('caliper')}），"
+                       f"ATT={d.get('att'):+.4f}，95% CI [{d.get('ci_low'):+.4f}, {d.get('ci_high'):+.4f}]，"
+                       f"匹配 {d.get('n_matched')} 对")
+            out.append("")
+            rows = []
+            for c in d.get("covariates", []):
+                rows.append([c, f"{d['balance_before'][c]:+.3f}",
+                             f"{d['balance_after'][c]:+.3f}",
+                             "不平衡" if abs(d["balance_after"][c]) > 0.1 else ""])
+            out.append(md_table(["协变量", "匹配前 SMD", "匹配后 SMD", "判据"], rows))
+        else:
+            d = f.data
+            out.append(f"**{f.id}**：PSM-DID，匹配 {d.get('matched_pairs')} 对后 "
+                       f"DID 系数 {d.get('coef'):+.4f}（t={d.get('t'):.2f}，p={d.get('p'):.4f}，N={d.get('n')}）")
+        out.append("")
+    return "\n".join(out) if out else "_没有 PSM 结果_"
+
+
+def rdd_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "rdd"]
+    rows = []
+    for f in items:
+        d = f.data
+        rows.append([f.id, d.get("cut"), f"{d.get('coef'):+.4f}",
+                     f"{d.get('coef_robust'):+.4f}" if d.get("coef_robust") is not None else "-",
+                     f"{d.get('p_robust'):.4f}" if d.get("p_robust") is not None else "-",
+                     f"{d.get('bw_left'):.3f}" if d.get("bw_left") else "-", d.get("n_eff")])
+    return (md_table(["检验", "断点", "conventional", "robust", "robust p", "带宽", "有效样本"], rows)
+            if rows else "_没有断点回归_")
+
+
+def synth_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "synth"]
+    out = []
+    for f in items:
+        d = f.data
+        out.append(f"**{f.id}**：{d.get('treated_unit')}（{d.get('treat_time')} 起），"
+                   f"处理后平均效应 {d.get('att_post'):+.4f}，"
+                   f"RMSPE 前 {d.get('rmspe_pre'):.4f} / 后 {d.get('rmspe_post'):.4f}，"
+                   f"placebo p={d.get('p_rank'):.3f}")
+        out.append("")
+        rows = [[w["unit"], f"{w['w']:.3f}"] for w in d.get("top_weights", [])]
+        if rows:
+            out.append(md_table(["权重最大的对照单位", "权重"], rows))
+            out.append("")
+    return "\n".join(out) if out else "_没有合成控制结果_"
+
+
+def heckman_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "heckman"]
+    out = []
+    for f in items:
+        d = f.data
+        rows = [[r["var"], f"{r['coef']:+.4f}", f"({r['se']:.4f})", f"{r['t']:.2f}",
+                 f"{r['p']:.3f}"] for r in d.get("rows", [])]
+        out.append(f"**{f.id}**：Heckman 两步，观测 {d.get('n_observed')}/{d.get('n_total')}")
+        out.append("")
+        out.append(md_table(["变量", "系数", "标准误", "t", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有 Heckman 结果_"
+
+
 def mediation_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "mediation"]
     out = []
@@ -397,6 +466,10 @@ def report_md(F: Findings) -> str:
              "", "## 子样本", "", subsample_md(F),
              "", "## 分位回归", "", quantile_md(F),
              "", "## Tobit", "", tobit_md(F),
+             "", "## PSM / PSM-DID", "", psm_md(F),
+             "", "## 断点回归", "", rdd_md(F),
+             "", "## 合成控制", "", synth_md(F),
+             "", "## Heckman", "", heckman_md(F),
              "", "## 中介效应", "", mediation_md(F),
              "", "## 跨组系数差异", "", group_test_md(F),
              "", "## 多重检验校正", "", multitest_md(F),

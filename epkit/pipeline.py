@@ -26,7 +26,11 @@ from .checks.trend_box import box_plot, trend
 from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.did import did
+from .estimate.heckman import heckman
 from .estimate.inference import inference, permutation
+from .estimate.psm import psm, psm_did
+from .estimate.rdd import rdd
+from .estimate.synth import synth
 from .estimate.reg import reg
 from .estimate.tobit import tobit
 from .findings import Finding, Findings
@@ -83,6 +87,16 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
             reg_registry.setdefault(t["reg"].get("id", "reg"), t["reg"])
+        elif "psm" in t:
+            F.add(psm(df, t["psm"]))
+        elif "psm_did" in t:
+            F.add(psm_did(df, t["psm_did"]))
+        elif "rdd" in t:
+            F.add(rdd(df, t["rdd"]))
+        elif "synth" in t:
+            F.add(synth(df, t["synth"]))
+        elif "heckman" in t:
+            F.add(heckman(df, t["heckman"]))
         elif "tobit" in t:
             F.add(tobit(df, t["tobit"]))
         elif "did" in t:
