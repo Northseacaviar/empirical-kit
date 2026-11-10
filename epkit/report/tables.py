@@ -118,6 +118,29 @@ def vif_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有共线性诊断_"
 
 
+def did_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "did"]
+    out = []
+    for f in items:
+        d = f.data
+        rows = [[("基准" if r["k"] == -1 else f"{r['k']:+d}"), f"{r['coef']:+.4f}",
+                 f"({r['se']:.4f})", f"{r['t']:.2f}", f"{r['p']:.3f}"] for r in d["event_time"]]
+        out.append(f"**{f.id}**：{f.data['y']}，窗口 [{d['window'][0]},{d['window'][1]}]"
+                   f"（端点归并），基准 k=-1，N={d['n']}")
+        out.append("")
+        out.append(md_table(["事件时间", "系数", "标准误", "t", "p"], rows))
+        out.append("")
+        if d.get("pre_trend_wald"):
+            wt = d["pre_trend_wald"]
+            out.append(f"预趋势联合检验：χ²={wt['stat']:.2f}，df={wt['df']}，p={wt['p']:.4f}"
+                       + ("（未通过）" if wt["p"] < 0.05 else "（通过）"))
+            out.append("")
+        if d.get("staggered"):
+            out.append("> 交错处理：TWFE 动态效应存在负权重，需 CS / did2s / Sun-Abraham 复核。")
+            out.append("")
+    return "\n".join(out) if out else "_没有 DID 结果_"
+
+
 def robustness_md(F: Findings) -> str:
     """安慰剂与留一法。"""
     out = []
@@ -136,6 +159,28 @@ def robustness_md(F: Findings) -> str:
                        f"{f.data['diff_without_extreme']:+.3f}（移动 {f.data['max_shift']:+.3f}）")
             out.append("")
     return "\n".join(out) if out else "_没有稳健性检验_"
+
+
+def multitest_md(F: Findings) -> str:
+    """多重检验校正：只列显著性与校正后变化明显的行。"""
+    items = [f for f in F.items if f.type == "multitest" and f.id != "multitest_hint"]
+    out = []
+    for f in items:
+        d = f.data
+        tests = d.get("tests") or []
+        if not tests:
+            out.append(f"_{f.id}：{f.why}_")
+            out.append("")
+            continue
+        rows = [[t["label"], f"{t['p_raw']:.4f}", f"{t['p_adj']:.4f}",
+                 "显著" if t["sig_raw"] else "", "显著" if t["sig_adj"] else ""]
+                for t in tests]
+        out.append(f"**{f.id}**：{d['method']} 校正，α={d['alpha']}，"
+                   f"未校正显著 {d['n_sig_raw']} / 校正后显著 {d['n_sig_adj']}（共 {len(tests)} 次检验）")
+        out.append("")
+        out.append(md_table(["检验", "p（未校正）", "p（校正后）", "未校正", "校正后"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有多重检验校正_"
 
 
 def summary_text(F: Findings) -> str:
@@ -158,6 +203,8 @@ def report_md(F: Findings) -> str:
              "", "## 共线性", "", vif_md(F),
              "", "## 组间差异", "", group_diff_md(F),
              "", "## 回归", "", reg_md(F),
+             "", "## DID", "", did_md(F),
+             "", "## 多重检验校正", "", multitest_md(F),
              "", "## 稳健性", "", robustness_md(F), ""]
     warns = [f for f in F.items if f.status != "ok"]
     if warns:

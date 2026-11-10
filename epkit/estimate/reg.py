@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from ..findings import Finding
+from .iv import iv_diagnostics, iv_warnings
 
 try:
     import pyfixest as pf
@@ -22,13 +23,14 @@ except ImportError:  # pragma: no cover
 
 def _formula(y: str, xs: list[str], controls: list[str], fe: list[str],
              iv: dict[str, Any] | None = None) -> str:
+    # pyfixest 0.70 起 IV 要用方括号内联写法，旧的 `y ~ x | fe | x ~ z` 已弃用。
     parts = list(xs) + list(controls)
     if iv:
         endog = " + ".join(iv["endog"])
         inst = " + ".join(iv["instruments"])
-        parts.append(f"[{endog} ~ {inst}]")   # pyfixest 0.70 的 IV 写法
-    right = " + ".join(parts) if parts else "1"
-    f = f"{y} ~ {right}"
+        parts.append(f"[{endog} ~ {inst}]")
+    right = " + ".join(parts)
+    f = f"{y} ~ 1 + {right}" if right else f"{y} ~ 1"
     if fe:
         f += " | " + " + ".join(fe)
     return f
@@ -93,9 +95,8 @@ def reg(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
                         "p": float(tidy.loc[xv, "Pr(>|t|)"]),
                     }
                 g = int(min(m._G)) if getattr(m, "_G", None) else _n_clusters(df, vspec)
-                fitted[vname] = {"terms": row, "n": int(m._N),
-                                 "r2": float(m._r2) if m._r2 is not None else None,
-                                 "g": g}
+                r2 = float(m._r2) if m._r2 is not None and np.isfinite(m._r2) else None
+                fitted[vname] = {"terms": row, "n": int(m._N), "r2": r2, "g": g}
         except Exception as exc:
             steps.append({"label": label, "formula": fml, "error": f"{type(exc).__name__}: {exc}"})
             status = "fail"
@@ -135,6 +136,20 @@ def reg(df: pd.DataFrame, cfg: dict[str, Any]) -> Finding:
             why = (f"{focus} → {y}：β={coef:.4f}，t={t_main:.2f}（{base}，N={main0['n']}）")
     else:
         why = "所有设定均估计失败"
+    iv_diag = None
+    if iv:
+        # IV 诊断按主回归同一套固定效应与聚类口径算；用最全的一组控制变量。
+        try:
+            iv_diag = iv_diagnostics(df, {"y": y, "x": xs, "controls": ladder[-1],
+                                          "fe": fe, "cluster": clusters, "iv": iv})
+            w_lines, iv_bad = iv_warnings(iv_diag)
+            warnings.extend(w_lines)
+            if iv_bad:
+                status = "warn" if status != "fail" else status
+        except Exception as exc:
+            warnings.append(f"IV 诊断失败：{type(exc).__name__}: {exc}")
+            status = "warn" if status != "fail" else status
+
     return Finding(fid, "reg", status, why,
                    {"y": y, "x": xs, "fe": fe, "cluster": clusters, "main_vcov": base,
-                    "steps": steps, "focus": focus}, warnings=warnings)
+                    "steps": steps, "focus": focus, "iv": iv_diag}, warnings=warnings)

@@ -1,0 +1,14 @@
+name: did-demo
+# 演示：单期 DID 的事件研究 + 预趋势检验
+data:
+  panel: D:/empirical-kit/examples/did_demo/panel.csv
+tests:
+  - did:
+      id: policy_did
+      y: y
+      cohort: cohort        # 首次处理年份，未处理填 0
+      period: year
+      idvar: firm
+      cluster: [firm]
+      window: [-5, 6]
+output_dir: D:/empirical-kit/examples/did_demo/output

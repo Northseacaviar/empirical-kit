@@ -37,5 +37,8 @@ def test_mean_median_t_pctpos(findings, fid):
 
 
 def test_n_matches_paper(findings):
-    for f in findings.items:
+    # 只看这一个 spec 的复现项；multitest_hint 这类提醒不算表 4-1 的单元
+    cells = [f for f in findings.items if f.id in PAPER]
+    assert len(cells) == len(PAPER)
+    for f in cells:
         assert f.data["n"] == 352, f"{f.id} 样本量 {f.data['n']} != 352"

@@ -107,10 +107,40 @@ def placebo_scatter(F: Findings, path: Path, title: str | None = None) -> Path |
     return path
 
 
+def event_study(F: Findings, path: Path, title: str | None = None) -> Path | None:
+    """DID 事件研究图：各事件时间的系数与 95% 置信区间。"""
+    f = next((x for x in F.items if x.type == "did"), None)
+    if f is None:
+        return None
+    rows = f.data["event_time"]
+    if len(rows) < 2:
+        return None
+    ks = [r["k"] for r in rows]
+    coef = np.array([r["coef"] for r in rows])
+    se = np.array([r["se"] for r in rows])
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0), dpi=150)
+    ax.axhline(0, color="#888", lw=0.8, ls="--")
+    ax.axvline(-0.5, color="#c0392b", lw=0.8, ls=":")   # 处理时点（基准 -1 与 0 之间）
+    ax.errorbar(ks, coef, yerr=1.96 * se, fmt="o", color="#1f4e79", ecolor="#9db9d0",
+                capsize=3, ms=5)
+    ax.set_xticks(ks)
+    ax.set_xlabel("相对处理时点（期）")
+    ax.set_ylabel(f"处理效应（{F.meta.get('unit') or '原单位'}）")
+    ax.set_title(title or f"{f.id}：DID 事件研究", fontsize=10)
+    ax.grid(alpha=0.25, lw=0.6)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def make_all(F: Findings, out_dir: Path) -> list[Path]:
     made = []
     for fn, name in [(lambda p: term_structure(F, p), "term_structure.png"),
-                     (lambda p: placebo_scatter(F, p), "placebo.png")]:
+                     (lambda p: placebo_scatter(F, p), "placebo.png"),
+                     (lambda p: event_study(F, p), "event_study.png")]:
         try:
             p = fn(out_dir / name)
             if p:
