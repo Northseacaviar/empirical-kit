@@ -81,3 +81,12 @@ def test_reg_iv_coefficient_recovered():
     step = next(s for s in f.data["steps"] if "by_vcov" in s)
     coef = step["coef"]
     assert abs(coef - 1.0) < 0.15, coef
+
+
+def test_iv_warnings_flags_sargan_rejection():
+    """Sargan 判据的守备：p 在 0.05 附近也要报，不能只在极小 p 时才报。"""
+    diag = {"first_stage": [],
+            "sargan": {"stat": 4.2, "df": 1, "p": 0.04, "n": 500, "r2": 0.0084}}
+    warns, bad = iv_warnings(diag)
+    assert bad is True
+    assert any("过度识别" in w for w in warns), warns

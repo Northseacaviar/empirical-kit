@@ -45,6 +45,17 @@ def test_detect_units_decimal_vs_percent():
     assert detect_return_units(pct) == "percent"
 
 
+def test_detect_units_on_skewed_percent_car():
+    # 百分点口径的 CAR，但分布集中在小值（中位数 0.2 左右）、尾巴到 3：
+    # 用中位数判会落进盲区，只有 P99 判据认得出来。
+    rng = np.random.default_rng(9)
+    n = 2000
+    v = np.where(rng.random(n) < 0.7, rng.normal(0, 0.25, n), rng.normal(0, 1.8, n))
+    s = pd.Series(v)
+    assert 0.2 <= abs(s).median() <= 0.5, abs(s).median()
+    assert detect_return_units(s) == "percent"
+
+
 def test_detect_units_gives_up_on_short_series():
     assert detect_return_units(pd.Series([0.01, 0.02])) is None
 
