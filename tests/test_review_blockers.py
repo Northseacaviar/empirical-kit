@@ -52,8 +52,9 @@ def test_cs_pre_period_excludes_own_treatment_group():
     c = next(r for r in res["att_gt"] if r["g"] == 2015 and r["k"] == -3)
     # 两年的差分预趋势 = 2 × 0.5 = 1.0（方向：2012 − 2014 = −1.0）
     assert c["att"] < -0.75, c
-    # 控制组只能来自「2015 之后才处理」的队列与 never 组，绝不能含自己那 300 家
-    assert c["n_control"] <= 600, c
+    # 控制组必须恰好是「2015 之后才处理」的 300 家 + never 的 300 家
+    # （写成 <= 600 会放过「漏掉 never 组」的实现——那正是这一条要守的）
+    assert c["n_control"] == 600, c
 
 
 def test_cs_post_period_unchanged_by_fix():
@@ -189,3 +190,30 @@ def test_overid_missing_becomes_warning():
     warns, bad = iv_warnings(diag)
     assert bad is True
     assert any("过度识别检验未完成" in w for w in warns), warns
+
+
+def test_cs_pre_period_control_group_includes_never_treated():
+    """never 组必须真的进控制组。
+
+    造一份只有 never 组带趋势的数据：若实现漏掉 never（例如把 cut 只写成 t1，
+    k<0 时 g' > t1 恰好排除了 never 的 0 编码），控制组只剩后期队列，
+    估出来的系数会整整差一倍。
+    """
+    rng = np.random.default_rng(21)
+    rows = []
+    for g, ids, trend in [(2015, range(200), 0.0),
+                          (2018, range(200, 400), 0.0),
+                          (0, range(400, 600), 0.5)]:
+        for i in ids:
+            fe = rng.normal(0, 0.4)
+            for t in range(2010, 2023):
+                # never 组的趋势一直走；其余组平坦
+                lvl = trend * (t - 2010)
+                rows.append({"firm": i, "year": t, "cohort": g,
+                             "y": fe + lvl + rng.normal(0, 0.15)})
+    d = pd.DataFrame(rows)
+    res = cs_att_gt(d, "y", "firm", "year", "cohort", window=(-3, 1))
+    c = next(r for r in res["att_gt"] if r["g"] == 2015 and r["k"] == -3)
+    # 处理组平坦、never 组比基准期低 1.0（两年 × 0.5），混合控制组约 -0.5 → ATT ≈ +0.5
+    assert 0.3 < c["att"] < 0.7, c
+    assert c["n_control"] == 400, c
