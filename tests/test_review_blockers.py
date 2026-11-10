@@ -217,3 +217,30 @@ def test_cs_pre_period_control_group_includes_never_treated():
     # 处理组平坦、never 组比基准期低 1.0（两年 × 0.5），混合控制组约 -0.5 → ATT ≈ +0.5
     assert 0.3 < c["att"] < 0.7, c
     assert c["n_control"] == 400, c
+
+
+def test_cs_pre_period_excludes_cohorts_treated_before_base():
+    """k<0 时，控制组不能是「基准期之前就已处理」的队列。
+
+    2018 组在 k=-4 时：t1=2014、基准期 g-1=2017。2015 组在 2015 就被处理过，
+    它在这两个时点之间不是干净的对照。只写 `g' > t1` 会把 2015 组当对照，
+    于是 2018 组的预期间系数被 2015 组的真实处理效应污染。
+    """
+    rng = np.random.default_rng(33)
+    rows = []
+    for g, ids in [(2015, range(200)), (2018, range(200, 400)), (0, range(400, 600))]:
+        for i in ids:
+            fe = rng.normal(0, 0.4)
+            for t in range(2010, 2023):
+                # 只有 2015 组在处理后有 +2.0 的跳变，其余平坦
+                jump = 2.0 if (g == 2015 and t >= 2015) else 0.0
+                rows.append({"firm": i, "year": t, "cohort": g,
+                             "y": fe + jump + rng.normal(0, 0.15)})
+    d = pd.DataFrame(rows)
+    res = cs_att_gt(d, "y", "firm", "year", "cohort", window=(-5, 1))
+    c = next(r for r in res["att_gt"] if r["g"] == 2018 and r["k"] == -4)
+    # 2018 组本身平坦，干净的控制组也平坦 → ATT 应接近 0；
+    # 混进 2015 组（带 +2.0 跳变）会把它拉成约 -2.0
+    assert abs(c["att"]) < 0.5, c
+    # 控制组只能是 never 组，2015 组必须被排除
+    assert c["n_control"] == 200, c
