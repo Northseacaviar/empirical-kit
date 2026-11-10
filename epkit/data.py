@@ -9,22 +9,30 @@ from pathlib import Path
 
 import pandas as pd
 
+from .data_sources.csmar import normalize
+
 from .spec import FilterSpec, StudySpec
 
 
-def read_table(path: str | Path, encoding: str = "utf-8-sig", **kw) -> pd.DataFrame:
+def read_table(path: str | Path, encoding: str = "utf-8-sig",
+               column_map: str | None = None, **kw) -> pd.DataFrame:
     """按后缀读表。UTF-8 BOM 是 CSMAR/巨潮导出的常态，默认用 utf-8-sig。"""
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"数据文件不存在：{p}")
     suf = p.suffix.lower()
     if suf in {".xlsx", ".xls", ".xlsm"}:
-        return pd.read_excel(p, **kw)
-    if suf == ".parquet":
-        return pd.read_parquet(p, **kw)
-    if suf in {".dta"}:
-        return pd.read_stata(p, **kw)
-    return pd.read_csv(p, encoding=encoding, **kw)
+        df = pd.read_excel(p, **kw)
+    elif suf == ".parquet":
+        df = pd.read_parquet(p, **kw)
+    elif suf in {".dta"}:
+        df = pd.read_stata(p, **kw)
+    else:
+        df = pd.read_csv(p, encoding=encoding, **kw)
+    if column_map:
+        # CSMAR 导出的列名与 spec 的约定不同，进来先对齐，后面所有步骤只认标准名
+        df, _ = normalize(df, column_map)
+    return df
 
 
 @dataclass
@@ -115,9 +123,9 @@ def load_prices(spec: StudySpec) -> dict[str, pd.DataFrame]:
     if p.is_dir():
         for f in sorted(p.glob(cfg.prices_glob)):
             code = f.stem.replace("_", ".", 1)
-            out[code] = _norm(read_table(f, encoding=cfg.encoding))
+            out[code] = _norm(read_table(f, encoding=cfg.encoding, column_map=cfg.column_map))
     elif p.is_file():
-        long = read_table(p, encoding=cfg.encoding)
+        long = read_table(p, encoding=cfg.encoding, column_map=cfg.column_map)
         if cfg.code_col not in long.columns:
             raise KeyError(f"长表缺少代码列 {cfg.code_col}")
         for code, g in long.groupby(cfg.code_col):
@@ -134,7 +142,7 @@ def load_market(spec: StudySpec) -> pd.Series | None:
     cfg = spec.data
     if not cfg.index:
         return None
-    df = read_table(cfg.index, encoding=cfg.encoding)
+    df = read_table(cfg.index, column_map=cfg.column_map,  encoding=cfg.encoding)
     df[cfg.date_col] = pd.to_datetime(df[cfg.date_col], errors="coerce")
     s = df.dropna(subset=[cfg.date_col]).set_index(cfg.date_col)[cfg.close_col]
     s = pd.to_numeric(s, errors="coerce").dropna().sort_index()
@@ -145,7 +153,7 @@ def load_cross_section(spec: StudySpec) -> pd.DataFrame | None:
     cfg = spec.data
     if not cfg.cross_section:
         return None
-    df = read_table(cfg.cross_section, encoding=cfg.encoding)
+    df = read_table(cfg.cross_section, column_map=cfg.column_map,  encoding=cfg.encoding)
     if cfg.code_col in df.columns:
         df[cfg.code_col] = df[cfg.code_col].astype(str)
     return df

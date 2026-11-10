@@ -11,6 +11,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 from ..findings import Findings
@@ -136,11 +137,80 @@ def event_study(F: Findings, path: Path, title: str | None = None) -> Path | Non
     return path
 
 
+def spec_curve(F: Findings, path: Path, title: str | None = None) -> Path | None:
+    """规格曲线：每个设定一个点，按系数排序，画出中位数与 95% 区间。"""
+    f = next((x for x in F.items if x.type == "spec_curve"), None)
+    if f is None or not f.data.get("specs"):
+        return None
+    specs = sorted(f.data["specs"], key=lambda r: r["coef"])
+    coef = np.array([r["coef"] for r in specs])
+    se = np.array([r["se"] for r in specs])
+    p = np.array([r["p"] for r in specs])
+    xs = np.arange(len(specs))
+    med = float(f.data["summary"]["median"])
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0), dpi=150)
+    ax.axhline(0, color="#888", lw=0.8, ls="--")
+    ax.axhline(med, color="#c0392b", lw=1.0, ls="-", label=f"中位数 {med:+.3f}")
+    ax.errorbar(xs[p >= 0.05], coef[p >= 0.05], yerr=1.96 * se[p >= 0.05],
+                fmt="o", ms=4, color="#9db9d0", ecolor="#d5e2ec", capsize=2,
+                label="不显著")
+    ax.errorbar(xs[p < 0.05], coef[p < 0.05], yerr=1.96 * se[p < 0.05],
+                fmt="o", ms=4.5, color="#1f4e79", ecolor="#7fa6c8", capsize=2,
+                label="5% 显著")
+    ax.set_xlabel("设定（按系数排序）")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_ylabel("系数")
+    ax.set_title(title or f"{f.id}：规格曲线（{len(specs)} 个设定）", fontsize=10)
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(alpha=0.2, lw=0.6, axis="y")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def density_plot(F: Findings, path: Path, max_vars: int = 4) -> Path | None:
+    """分布图：每个变量一张直方密度，标出均值与中位数。"""
+    f = next((x for x in F.items if x.type == "density"), None)
+    if f is None:
+        return None
+    items = [i for i in f.data["items"] if i.get("hist")][:max_vars]
+    if not items:
+        return None
+    ncol = 2 if len(items) > 1 else 1
+    nrow = int(np.ceil(len(items) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(7.2, 2.6 * nrow), dpi=150, squeeze=False)
+    for k, it in enumerate(items):
+        ax = axes[k // ncol][k % ncol]
+        edges = np.array(it["hist"]["edges"])
+        dens = np.array(it["hist"]["density"])
+        centers = (edges[:-1] + edges[1:]) / 2
+        ax.bar(centers, dens, width=np.diff(edges), color="#9db9d0",
+               edgecolor="#1f4e79", lw=0.4, alpha=0.85)
+        ax.axvline(it["mean"], color="#c0392b", lw=0.9, ls="-")
+        ax.axvline(it["median"], color="#1f4e79", lw=0.9, ls=":")
+        ax.set_title(f"{it['var']}（偏度 {it['skew']:.2f}，峰度 {it['kurt']:.1f}）", fontsize=9)
+        ax.grid(alpha=0.2, lw=0.5, axis="y")
+        ax.tick_params(labelsize=7)
+    for k in range(len(items), nrow * ncol):
+        axes[k // ncol][k % ncol].axis("off")
+    fig.suptitle("分布：实线均值，点线中位数", fontsize=9)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def make_all(F: Findings, out_dir: Path) -> list[Path]:
     made = []
     for fn, name in [(lambda p: term_structure(F, p), "term_structure.png"),
                      (lambda p: placebo_scatter(F, p), "placebo.png"),
-                     (lambda p: event_study(F, p), "event_study.png")]:
+                     (lambda p: event_study(F, p), "event_study.png"),
+                     (lambda p: spec_curve(F, p), "spec_curve.png"),
+                     (lambda p: density_plot(F, p), "density.png")]:
         try:
             p = fn(out_dir / name)
             if p:

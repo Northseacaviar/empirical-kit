@@ -161,6 +161,119 @@ def robustness_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有稳健性检验_"
 
 
+def spec_curve_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "spec_curve"]
+    out = []
+    for f in items:
+        d = f.data
+        s = d["summary"]
+        out.append(f"**{f.id}**：{s['n_specs']} 个设定（失败 {s['n_failed']}），"
+                   f"中位系数 {s['median']:+.4f}，P10~P90 {s['p10']:+.4f} ~ {s['p90']:+.4f}，"
+                   f"显著比例 {s['share_sig']:.0%}")
+        out.append("")
+        specs = sorted(d["specs"], key=lambda r: r["coef"])
+        rows = []
+        for r in specs:
+            label = ("+".join(r["controls"]) or "无控制") + " | " + \
+                    ("+".join(r["fe"]) or "无FE") + " | " + str(r["vcov"])
+            rows.append([label, f"{r['coef']:+.4f}", f"({r['se']:.4f})",
+                         f"{r['t']:.2f}", f"{r['p']:.3f}", r["n"]])
+        out.append(md_table(["控制变量 | 固定效应 | 推断", "系数", "标准误", "t", "p", "N"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有规格曲线_"
+
+
+def subsample_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "subsample"]
+    out = []
+    for f in items:
+        rows = []
+        for r in f.data["rows"]:
+            if r.get("coef") is None:
+                rows.append([r["group"], r["n"], "-", "-", "-", "-"])
+            else:
+                rows.append([r["group"], r["n"], f"{r['coef']:+.4f}", f"({r['se']:.4f})",
+                             f"{r['t']:.2f}", f"{r['p']:.3f}"])
+        out.append(f"**{f.id}**：按 {f.data['by']} 分组，{f.data['x']} → {f.data['y']}")
+        out.append("")
+        out.append(md_table(["分组", "N", "系数", "标准误", "t", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有子样本网格_"
+
+
+def quantile_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "quantile"]
+    out = []
+    for f in items:
+        rows = [[f"{r['q']:.2f}", f"{r['coef']:+.4f}", f"({r['se']:.4f})",
+                 f"{r['t']:.2f}", f"{r['p']:.3f}"] for r in f.data["rows"]]
+        note = "（固定效应为组内去均值近似）" if f.data.get("fe") else ""
+        out.append(f"**{f.id}**：{f.data['x']} → {f.data['y']} 的分位回归{note}")
+        out.append("")
+        out.append(md_table(["分位", "系数", "标准误", "t", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有分位回归_"
+
+
+def density_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "density"]
+    out = []
+    for f in items:
+        rows = [[i["var"], i["n"], f"{i['skew']:.2f}", f"{i['kurt']:.2f}",
+                 f"{i['p01']:.3f}", f"{i['p99']:.3f}", f"{i['tail_share']:.2%}"]
+                for i in f.data["items"] if i.get("skew") is not None]
+        if not rows:
+            continue
+        out.append(f"**{f.id}**：分布诊断（|偏度|>2 或超额峰度>7 判严重偏态）")
+        out.append("")
+        out.append(md_table(["变量", "N", "偏度", "超额峰度", "P1", "P99", "尾部占比"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有分布诊断_"
+
+
+def confound_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "confound"]
+    out = []
+    for f in items:
+        rows = [[e["date"], e["label"], "、".join(e["hits"]) or "无重叠"]
+                for e in f.data["events"]]
+        out.append(f"**{f.id}**：主事件 {f.data['main_event']}，窗口 "
+                   f"{f.data['windows']}")
+        out.append("")
+        out.append(md_table(["日期", "混杂事件", "落在哪几个窗口"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有混杂事件筛查_"
+
+
+def pileup_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "pileup"]
+    out = []
+    for f in items:
+        d = f.data
+        rows = [[f"{b['center']:.4f}", b["count"]] for b in d["bins"]]
+        out.append(f"**{f.id}**：{d['var']} 在阈值 {d['cut']} 附近的密度"
+                   f"（带宽 ±{d['bw']}，N={d['n_near']}）")
+        out.append("")
+        out.append(f"θ={d['theta']:+.3f}，z={d['z']:.2f}，p={d['p']:.3f}"
+                   f"（左侧 {d['f_left']:.1f}/箱，右侧 {d['f_right']:.1f}/箱）")
+        out.append("")
+        out.append(md_table(["箱中心", "频数"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有阈值堆积检验_"
+
+
+def reliability_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "reliability"]
+    rows = []
+    for f in items:
+        d = f.data
+        rows.append([f.id, f"{d['alpha']:.3f}" if d["alpha"] == d["alpha"] else "-",
+                     f"{d['agreement']:.1%}" if d.get("agreement") is not None else "-",
+                     "/".join(d["coders"]), f"{d['n_complete']}/{d['n_units']}", f.status])
+    return (md_table(["编码项", "Krippendorff α", "完全一致率", "编码者", "完整单元", "状态"], rows)
+            if rows else "_没有双编码信度_")
+
+
 def multitest_md(F: Findings) -> str:
     """多重检验校正：只列显著性与校正后变化明显的行。"""
     items = [f for f in F.items if f.type == "multitest" and f.id != "multitest_hint"]
@@ -204,6 +317,13 @@ def report_md(F: Findings) -> str:
              "", "## 组间差异", "", group_diff_md(F),
              "", "## 回归", "", reg_md(F),
              "", "## DID", "", did_md(F),
+             "", "## 分布诊断", "", density_md(F),
+             "", "## 混杂事件", "", confound_md(F),
+             "", "## 阈值堆积", "", pileup_md(F),
+             "", "## 编码信度", "", reliability_md(F),
+             "", "## 规格曲线", "", spec_curve_md(F),
+             "", "## 子样本", "", subsample_md(F),
+             "", "## 分位回归", "", quantile_md(F),
              "", "## 多重检验校正", "", multitest_md(F),
              "", "## 稳健性", "", robustness_md(F), ""]
     warns = [f for f in F.items if f.status != "ok"]

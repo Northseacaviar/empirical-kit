@@ -12,6 +12,14 @@ from .checks.desc import corr, describe
 from .checks.leave_one import leave_one_out
 from .checks.mean import mean_test
 from .checks.multitest import collect_p, multitest
+from .checks.confound import confound
+from .checks.density import density
+from .checks.pileup import pileup
+from .checks.reliability import reliability
+from .data_sources.csmar import audit_units
+from .checks.quantile import quantile
+from .checks.spec_curve import spec_curve
+from .checks.subsample import subsample
 from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.did import did
@@ -42,6 +50,13 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
             print(f"[1/4] 面板 {len(df)} 行（panel 模式）")
 
     F.sample_flow = flow.as_list()
+
+    # 单位审计：小数/百分点混用差 100 倍且不报错，这一步就是防它
+    unit_notes = audit_units(df, spec.data.scale, spec.data.unit)
+    if unit_notes:
+        F.add(Finding("unit_audit", "unit", "warn",
+                      "收益率单位与 spec 的换算系数可能不一致", {"notes": unit_notes},
+                      warnings=unit_notes))
     if verbose:
         print(f"[2/4] 样本 {flow.initial} → {len(df)}")
 
@@ -82,6 +97,20 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
         elif "leave_one_out" in t:
             c = t["leave_one_out"]
             F.add(leave_one_out(df, c["var"], c["by"], fid=c.get("id")))
+        elif "confound" in t:
+            F.add(confound(spec, t["confound"]))
+        elif "pileup" in t:
+            F.add(pileup(df, t["pileup"]))
+        elif "reliability" in t:
+            F.add(reliability(df, t["reliability"]))
+        elif "density" in t:
+            F.add(density(df, t["density"]))
+        elif "spec_curve" in t:
+            F.add(spec_curve(df, t["spec_curve"]))
+        elif "subsample" in t:
+            F.add(subsample(df, t["subsample"]))
+        elif "quantile" in t:
+            F.add(quantile(df, t["quantile"]))
         elif "placebo" in t:
             F.add(time_placebo(spec, t["placebo"], prices=prices, xs=xs, market=market,
                                verbose=verbose))

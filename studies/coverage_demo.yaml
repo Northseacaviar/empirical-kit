@@ -1,0 +1,29 @@
+name: coverage-demo
+# 覆盖演示：分布诊断 / 规格曲线 / 子样本 / 分位回归，跑一份横截面
+data:
+  panel: D:/empirical-kit/examples/coverage_demo/cross.csv
+tests:
+  - describe: {id: desc, vars: [y, x, lnx, c1]}
+  - density: {id: dist, vars: [y, x, lnx], by: ind}
+  - spec_curve:
+      id: sc
+      y: y
+      x: lnx
+      controls: [[], [c1], [c1, c2]]
+      fe: [[], [ind], [ind, year]]
+      vcov: [hetero, "cluster:ind"]
+      sign: "+"
+  - subsample:
+      id: sub_ind
+      y: y
+      x: lnx
+      controls: [c1, c2]
+      by: ind
+      min_n: 30
+  - quantile:
+      id: qr
+      y: y
+      x: lnx
+      controls: [c1]
+      q: [0.1, 0.25, 0.5, 0.75, 0.9]
+output_dir: D:/empirical-kit/examples/coverage_demo/output

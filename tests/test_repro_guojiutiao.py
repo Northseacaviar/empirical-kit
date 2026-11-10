@@ -31,7 +31,8 @@ def findings():
 
 def test_sample_split(findings):
     # 组 0 = 有分红，组 1 = 零分红；差定义为「组1 - 组0」
-    g = {x["label"]: x["n"] for x in findings.items[0].data["groups"]}
+    gd = next(x for x in findings.items if x.type == "group_diff")
+    g = {x["label"]: x["n"] for x in gd.data["groups"]}
     assert g["0"] == 521 and g["1"] == 279
 
 

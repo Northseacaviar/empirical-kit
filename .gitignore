@@ -7,3 +7,4 @@ examples/*/output/
 examples/*/output_*/
 output/
 .pytest_cache/
+.cache/
