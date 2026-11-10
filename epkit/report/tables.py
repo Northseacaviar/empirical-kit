@@ -161,6 +161,25 @@ def robustness_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有稳健性检验_"
 
 
+def tobit_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "tobit"]
+    out = []
+    for f in items:
+        d = f.data
+        if not d.get("rows"):
+            out.append(f"_{f.id}：{f.why}_")
+            out.append("")
+            continue
+        rows = [[r["var"], f"{r['coef']:+.4f}", f"({r['se']:.4f})",
+                 f"{r['z']:.2f}", f"{r['p']:.3f}"] for r in d["rows"]]
+        out.append(f"**{f.id}**：{d['y']} 的 Tobit，下界 {d['lower']}，上界 {d['upper']}，"
+                   f"删失 {d['n_left']} 左 / {d['n_right']} 右，N={d['n']}，σ={d['sigma']:.4f}")
+        out.append("")
+        out.append(md_table(["变量", "系数", "标准误", "z", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有 Tobit 结果_"
+
+
 def spec_curve_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "spec_curve"]
     out = []
@@ -333,6 +352,7 @@ def report_md(F: Findings) -> str:
              "", "## 规格曲线", "", spec_curve_md(F),
              "", "## 子样本", "", subsample_md(F),
              "", "## 分位回归", "", quantile_md(F),
+             "", "## Tobit", "", tobit_md(F),
              "", "## 多重检验校正", "", multitest_md(F),
              "", "## 稳健性", "", robustness_md(F), ""]
     warns = [f for f in F.items if f.status != "ok"]

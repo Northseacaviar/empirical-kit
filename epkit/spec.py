@@ -16,6 +16,50 @@ import yaml
 from pydantic import BaseModel, Field, model_validator
 
 
+class MergeSpec(BaseModel):
+    """一条合并规则。语义对齐 Stata 的 merge：连接键 + 保留列 + 基数校验。
+
+    为什么必须有 validate：左边是公司-年度面板、右边是年度行业表时，
+    写成 many_to_one 才能发现「右表键重复」这种错——否则 pandas 会静默扇出，
+    样本量翻倍而结果看似正常。
+    """
+
+    model_config = {"populate_by_name": True}
+
+    source: str = Field(alias="with")
+    on: list[str]
+    how: Literal["left", "inner", "right", "outer"] = "left"
+    keep: list[str] = Field(default_factory=list)
+    rename: dict[str, str] = Field(default_factory=dict)
+    # 内部叫 cardinality：pydantic 的 BaseModel 自带 validate 方法，同名会遮蔽并告警；
+    # 对外仍写 validate，与 Stata/pandas 的习惯一致
+    cardinality: Literal["one_to_one", "one_to_many", "many_to_one", "many_to_many"] = \
+        Field(default="many_to_one", alias="validate")
+    suffix: str = "_y"
+    min_match: float = 0.9
+
+
+
+def _fix_yaml_keys(obj):
+    """YAML 1.1 会把裸写的 on / off / yes / no 解析成布尔。
+
+    merge 的连接键恰恰叫 `on: [code, year]`，不修的话键会变成 True，
+    pydantic 报「on 字段缺失」而作者看不出为什么。
+    """
+    if isinstance(obj, dict):
+        fixed = {}
+        for k, v in obj.items():
+            if k is True:
+                k = "on"
+            elif k is False:
+                k = "off"
+            fixed[k] = _fix_yaml_keys(v)
+        return fixed
+    if isinstance(obj, list):
+        return [_fix_yaml_keys(x) for x in obj]
+    return obj
+
+
 class DataSpec(BaseModel):
     """数据来源。prices 可以是目录（每只证券一个 csv）或单个长表。"""
 
@@ -34,6 +78,8 @@ class DataSpec(BaseModel):
     encoding: str = "utf-8-sig"
     # 列名映射：'csmar' 走内置映射表；也可写自定义 {原名: 标准名} 的 dict
     column_map: str | None = None
+    # 依次并入的外部表（财务、治理、行业等）
+    merge: list[MergeSpec] = Field(default_factory=list)
     # 变量单位换算：CSMAR 的收益率是小数(-0.008)，自建面板常是百分点(-0.8)。
     # scale=100 表示「数据是小数、报告成百分点」。t 值不受影响。
     scale: float = 1.0
@@ -140,7 +186,7 @@ class StudySpec(BaseModel):
     def load(cls, path: str | Path) -> "StudySpec":
         p = Path(path)
         raw = yaml.safe_load(p.read_text(encoding="utf-8"))
-        spec = cls(**raw)
+        spec = cls(**_fix_yaml_keys(raw))
         spec._source = str(p.resolve())
         return spec
 

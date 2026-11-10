@@ -24,6 +24,7 @@ from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.did import did
 from .estimate.reg import reg
+from .estimate.tobit import tobit
 from .findings import Finding, Findings
 from .sample import build_sample, load_inputs
 from .spec import StudySpec
@@ -75,6 +76,8 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
                              scale=spec.scale_for(c["var"]), unit=spec.data.unit))
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
+        elif "tobit" in t:
+            F.add(tobit(df, t["tobit"]))
         elif "did" in t:
             F.add(did(df, t["did"]))
         elif "describe" in t:
