@@ -26,11 +26,16 @@ from .checks.trend_box import box_plot, trend
 from .checks.vif import vif
 from .checks.placebo import time_placebo
 from .estimate.did import did
+from .estimate.gmm import gmm
 from .estimate.heckman import heckman
 from .estimate.inference import inference, permutation
 from .estimate.psm import psm, psm_did
 from .estimate.rdd import rdd
+from .estimate.mixed import mixed
+from .estimate.sem import sem
+from .estimate.spatial import spatial
 from .estimate.synth import synth
+from .estimate.threshold import threshold
 from .estimate.reg import reg
 from .estimate.tobit import tobit
 from .findings import Finding, Findings
@@ -87,6 +92,16 @@ def run_spec(spec_path: str | Path, verbose: bool = True) -> Findings:
         elif "reg" in t:
             F.add(reg(df, t["reg"]))
             reg_registry.setdefault(t["reg"].get("id", "reg"), t["reg"])
+        elif "spatial" in t:
+            F.add(spatial(df, t["spatial"]))
+        elif "mixed" in t:
+            F.add(mixed(df, t["mixed"]))
+        elif "sem" in t:
+            F.add(sem(df, t["sem"]))
+        elif "gmm" in t:
+            F.add(gmm(df, t["gmm"]))
+        elif "threshold" in t:
+            F.add(threshold(df, t["threshold"]))
         elif "psm" in t:
             F.add(psm(df, t["psm"]))
         elif "psm_did" in t:

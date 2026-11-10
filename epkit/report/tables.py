@@ -161,10 +161,126 @@ def robustness_md(F: Findings) -> str:
     return "\n".join(out) if out else "_没有稳健性检验_"
 
 
+def spatial_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "spatial"]
+    out = []
+    for f in items:
+        d0 = f.data or {}
+        if not d0.get("rows"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
+        d = f.data
+        rows = [[r["var"], f"{r['coef']:+.4f}",
+                 f"{r['z']:.2f}" if r.get("z") is not None else "-",
+                 f"{r['p']:.3f}" if r.get("p") is not None else "-"] for r in d.get("rows", [])]
+        extra = (f"rho={d['rho']:.4f}" if d.get("rho") is not None
+                 else f"lambda={d['lambda']:.4f}" if d.get("lambda") is not None else "")
+        out.append(f"**{f.id}**：空间{d.get('model')}（N={d.get('n')}，{extra}）")
+        out.append("")
+        out.append(md_table(["变量", "系数", "z", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有空间计量结果_"
+
+
+def mixed_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "mixed"]
+    out = []
+    for f in items:
+        d0 = f.data or {}
+        if not d0.get("rows"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
+        d = f.data
+        rows = [[r["var"], f"{r['coef']:+.4f}", f"({r['se']:.4f})", f"{r['z']:.2f}",
+                 f"{r['p']:.3f}"] for r in d.get("rows", [])]
+        out.append(f"**{f.id}**：混合效应模型（{d.get('n')} 观测 / {d.get('n_groups')} 组），"
+                   f"ICC={d.get('icc'):.3f}" if d.get("icc") is not None else f"**{f.id}**")
+        out.append("")
+        out.append(md_table(["变量", "系数", "标准误", "z", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有多层模型_"
+
+
+def sem_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "sem"]
+    out = []
+    for f in items:
+        d0 = f.data or {}
+        if not d0.get("paths"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
+        d = f.data
+        rows = [[r["lhs"], r["op"], r["rhs"],
+                 f"{r['coef']:+.4f}" if r.get("coef") is not None else "-",
+                 f"({r['se']:.4f})" if r.get("se") is not None else "-",
+                 f"{r['p']:.3f}" if r.get("p") is not None else "-"]
+                for r in d.get("paths", [])]
+        fit = d.get("fit") or {}
+        fit_s = "，".join(f"{k}={v:.3f}" for k, v in fit.items() if k in ("CFI", "RMSEA", "SRMR"))
+        out.append(f"**{f.id}**：SEM（n={d.get('n')}）" + (f"；{fit_s}" if fit_s else ""))
+        out.append("")
+        out.append(md_table(["左", "关系", "右", "系数", "标准误", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有结构方程_"
+
+
+def gmm_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "gmm"]
+    out = []
+    for f in items:
+        d0 = f.data or {}
+        if not d0.get("rows"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
+        d = f.data
+        rows = [[r["var"], f"{r['coef']:+.4f}", f"({r['se']:.4f})", f"{r['z']:.2f}",
+                 f"{r['p']:.3f}"] for r in d.get("rows", [])]
+        out.append(f"**{f.id}**：{d.get('name')}，N={d.get('n_obs')}，"
+                   f"个体 {d.get('n_units')}，工具 {d.get('n_instruments')}；"
+                   f"Hansen J p={d['hansen']['p']:.3f}，AR(2) p={d.get('ar2_p'):.3f}")
+        out.append("")
+        out.append(md_table(["变量", "系数", "标准误", "z", "p"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有动态面板 GMM_"
+
+
+def threshold_md(F: Findings) -> str:
+    items = [f for f in F.items if f.type == "threshold"]
+    out = []
+    for f in items:
+        d0 = f.data or {}
+        if not d0.get("cut"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
+        d = f.data
+        rows = [
+            [f"{d['thr_var']} ≤ {d['cut']:.4f}", f"{d['coef_low'].get('coef', float('nan')):+.4f}",
+             f"({d['coef_low'].get('se', float('nan')):.4f})"],
+            [f"{d['thr_var']} > {d['cut']:.4f}", f"{d['coef_high'].get('coef', float('nan')):+.4f}",
+             f"({d['coef_high'].get('se', float('nan')):.4f})"],
+        ]
+        out.append(f"**{f.id}**：{d['x']} → {d['y']} 的面板门槛，门槛值 {d['cut']:.4f}"
+                   f"（sup-F={d['f_stat']:.2f}，bootstrap p={d['p_boot']:.3f}）")
+        out.append("")
+        out.append(md_table(["区间", "系数", "标准误"], rows))
+        out.append("")
+    return "\n".join(out) if out else "_没有门槛模型_"
+
+
 def psm_md(F: Findings) -> str:
     items = [f for f in F.items if f.type in ("psm", "psm_did")]
     out = []
     for f in items:
+        d0 = f.data or {}
+        if not d0.get("att"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
         d = f.data
         if f.type == "psm":
             out.append(f"**{f.id}**：PSM（{d.get('treat')} → {d.get('y')}，"
@@ -190,6 +306,10 @@ def rdd_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "rdd"]
     rows = []
     for f in items:
+        d0 = f.data or {}
+        if d0.get("coef") is None:
+            rows.append([f.id, "未完成：" + (f.why or "")[:40], "-", "-", "-", "-", "-"])
+            continue
         d = f.data
         rows.append([f.id, d.get("cut"), f"{d.get('coef'):+.4f}",
                      f"{d.get('coef_robust'):+.4f}" if d.get("coef_robust") is not None else "-",
@@ -203,6 +323,11 @@ def synth_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "synth"]
     out = []
     for f in items:
+        d0 = f.data or {}
+        if not d0.get("att_post"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
         d = f.data
         out.append(f"**{f.id}**：{d.get('treated_unit')}（{d.get('treat_time')} 起），"
                    f"处理后平均效应 {d.get('att_post'):+.4f}，"
@@ -220,6 +345,11 @@ def heckman_md(F: Findings) -> str:
     items = [f for f in F.items if f.type == "heckman"]
     out = []
     for f in items:
+        d0 = f.data or {}
+        if not d0.get("rows"):
+            out.append(f"_{f.id}：{f.why}")
+            out.append("")
+            continue
         d = f.data
         rows = [[r["var"], f"{r['coef']:+.4f}", f"({r['se']:.4f})", f"{r['t']:.2f}",
                  f"{r['p']:.3f}"] for r in d.get("rows", [])]
@@ -449,31 +579,44 @@ def summary_text(F: Findings) -> str:
     return "\n".join(lines)
 
 
+def _safe(fn, F: Findings) -> str:
+    """渲染器统一兜底：某张表失败时降级成一行说明，而不是让整份 report.md 崩掉。"""
+    try:
+        return fn(F)
+    except Exception as exc:  # noqa: BLE001 - 渲染失败不该中断交付
+        return f"_{fn.__name__} 渲染失败：{type(exc).__name__}: {exc}_"
+
+
 def report_md(F: Findings) -> str:
     parts = [f"# {F.spec_name}", "", f"spec hash `{F.spec_hash}`；方法 `{F.meta.get('method')}`；"
              f"窗口口径 `{F.meta.get('car_mode')}`", "", "## 样本流", "", sample_flow_md(F.sample_flow),
-             "", "## 描述统计", "", describe_md(F),
-             "", "## 相关矩阵", "", corr_md(F),
-             "", "## 共线性", "", vif_md(F),
-             "", "## 组间差异", "", group_diff_md(F),
-             "", "## 回归", "", reg_md(F),
-             "", "## DID", "", did_md(F),
-             "", "## 分布诊断", "", density_md(F),
-             "", "## 混杂事件", "", confound_md(F),
-             "", "## 阈值堆积", "", pileup_md(F),
-             "", "## 编码信度", "", reliability_md(F),
-             "", "## 规格曲线", "", spec_curve_md(F),
-             "", "## 子样本", "", subsample_md(F),
-             "", "## 分位回归", "", quantile_md(F),
-             "", "## Tobit", "", tobit_md(F),
-             "", "## PSM / PSM-DID", "", psm_md(F),
-             "", "## 断点回归", "", rdd_md(F),
-             "", "## 合成控制", "", synth_md(F),
-             "", "## Heckman", "", heckman_md(F),
-             "", "## 中介效应", "", mediation_md(F),
-             "", "## 跨组系数差异", "", group_test_md(F),
-             "", "## 多重检验校正", "", multitest_md(F),
-             "", "## 稳健性", "", robustness_md(F), ""]
+             "", "## 描述统计", "", _safe(describe_md, F),
+             "", "## 相关矩阵", "", _safe(corr_md, F),
+             "", "## 共线性", "", _safe(vif_md, F),
+             "", "## 组间差异", "", _safe(group_diff_md, F),
+             "", "## 回归", "", _safe(reg_md, F),
+             "", "## DID", "", _safe(did_md, F),
+             "", "## 分布诊断", "", _safe(density_md, F),
+             "", "## 混杂事件", "", _safe(confound_md, F),
+             "", "## 阈值堆积", "", _safe(pileup_md, F),
+             "", "## 编码信度", "", _safe(reliability_md, F),
+             "", "## 规格曲线", "", _safe(spec_curve_md, F),
+             "", "## 子样本", "", _safe(subsample_md, F),
+             "", "## 分位回归", "", _safe(quantile_md, F),
+             "", "## Tobit", "", _safe(tobit_md, F),
+             "", "## 空间计量", "", _safe(spatial_md, F),
+             "", "## 多层模型", "", _safe(mixed_md, F),
+             "", "## 结构方程", "", _safe(sem_md, F),
+             "", "## 动态面板 GMM", "", _safe(gmm_md, F),
+             "", "## 面板门槛", "", _safe(threshold_md, F),
+             "", "## PSM / PSM-DID", "", _safe(psm_md, F),
+             "", "## 断点回归", "", _safe(rdd_md, F),
+             "", "## 合成控制", "", _safe(synth_md, F),
+             "", "## Heckman", "", _safe(heckman_md, F),
+             "", "## 中介效应", "", _safe(mediation_md, F),
+             "", "## 跨组系数差异", "", _safe(group_test_md, F),
+             "", "## 多重检验校正", "", _safe(multitest_md, F),
+             "", "## 稳健性", "", _safe(robustness_md, F), ""]
     warns = [f for f in F.items if f.status != "ok"]
     if warns:
         parts += ["## 需要处理", ""]

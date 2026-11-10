@@ -54,6 +54,15 @@ output/
 | `inference` | wild cluster bootstrap（pyfixest/wildboottest）与 pairs bootstrap |
 | `permutation` | 置换检验：打乱解释变量的经验 p |
 | `trend` / `box` | 时间趋势（分组、95% 区间）与分组箱线；另出黑白印刷版 |
+| `psm` / `psm_did` | 倾向得分匹配（1:k、卡尺、有放回）、平衡性 SMD、bootstrap ATT；匹配后再跑 TWFE |
+| `rdd` | 断点回归（CCT 带宽、偏误校正、robust CI；报表用 robust p） |
+| `synth` | 合成控制（自定义 QP 解权重、placebo 排名 p） |
+| `heckman` | 两步法（probit 选择方程 + 逆米尔斯比），判断是否存在选择偏差 |
+| `gmm` | 差分 GMM（Arellano-Bond 两步、Hansen J、AR(1)/AR(2)） |
+| `threshold` | 面板门槛（网格搜索 + Hansen 自助法检验门槛显著性） |
+| `spatial` | 空间滞后/误差模型（SAR / SEM，需提供权重矩阵 csv） |
+| `mixed` | 多层/混合效应模型（随机截距/斜率、ICC） |
+| `sem` | 结构方程（lavaan 风格模型串，CFI/RMSEA/SRMR） |
 | `did` | 动态效应、预趋势 Wald；交错处理自动给 CS 估计量与 2x2 配对诊断 |
 | `describe` / `corr` / `vif` | 描述统计（含分位）、相关矩阵（自动出热图）、共线性 |
 | `density` | 偏度、峰度、尾部占比 + 分布图 |
@@ -150,7 +159,10 @@ tests:
 python -m pytest tests/ -q
 ```
 
-`tests/test_repro_*.py` 用两篇已发表论文的表作回归基线（均值差、标准误、t 值、样本量）。
+`tests/test_*.py` 覆盖各方法的已知答案检验（真参数能否恢复、诊断能否报警）。
+
+论文级的复现基线（`tests/test_repro_*.py` 与对应的 studies spec）依赖本地私有的论文数据，
+不随仓库分发；本机设好数据路径后照常运行。
 
 ## Status
 

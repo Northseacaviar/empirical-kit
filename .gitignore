@@ -10,3 +10,8 @@ output/
 .cache/
 # 本地成本核算脚本：含本机库路径，只留本机
 tools/token-report.py
+# 论文复现用例：依赖本机私有的论文数据（版权 + 路径），不随仓库分发
+studies/gov_subsidy_*.yaml
+studies/guojiutiao_tab2a.yaml
+examples/guojiutiao/
+tests/test_repro_*.py
