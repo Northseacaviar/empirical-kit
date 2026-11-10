@@ -2,8 +2,8 @@ name: baostock-event-20230828
 # 真实数据演示：印花税减半（2023-08-28）前后 5 只大盘股的累计异常收益
 # 数据由 `epkit fetch` 从 baostock 拉取，前复权收盘价
 data:
-  prices: D:/empirical-kit/.cache/prices
-  index: D:/empirical-kit/.cache/index.csv
+  prices: .cache/prices
+  index: .cache/index.csv
 event:
   mode: single
   date: "2023-08-28"
@@ -15,4 +15,4 @@ tests:
   - mean_test: {id: car_m1_1, var: car_m1_1}
   - mean_test: {id: car_0_5, var: car_0_5}
   - mean_test: {id: car_0_10, var: car_0_10}
-output_dir: D:/empirical-kit/examples/baostock_demo/output
+output_dir: examples/baostock_demo/output

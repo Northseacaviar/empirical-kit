@@ -8,3 +8,5 @@ examples/*/output_*/
 output/
 .pytest_cache/
 .cache/
+# 本地成本核算脚本：含本机库路径，只留本机
+tools/token-report.py

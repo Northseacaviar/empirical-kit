@@ -11,4 +11,4 @@ tests:
   - mean_test: {var: car_0_1,  id: tab4_1_0_1}
   - mean_test: {var: car_0_3,  id: tab4_1_0_3}
   - mean_test: {var: car_m5_5, id: tab4_1_m5_5}
-output_dir: D:/empirical-kit/examples/gov-subsidy/output_tab4_1
+output_dir: examples/gov-subsidy/output_tab4_1

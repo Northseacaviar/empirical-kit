@@ -11,4 +11,4 @@ tests:
   - group_diff: {var: car_m3_3, by: disclosed_asset, id: winsor_3d, winsor: [0.01, 0.99]}
   - group_diff: {var: car_m3_3, by: disclosed_asset, id: ex_bigcap, drop_where: "size > 25"}
   - group_diff: {var: car_m3_3, by: disclosed_asset, id: winsor_ex_big, winsor: [0.01, 0.99], drop_where: "size > 25"}
-output_dir: D:/empirical-kit/examples/gov-subsidy/output_robust
+output_dir: examples/gov-subsidy/output_robust

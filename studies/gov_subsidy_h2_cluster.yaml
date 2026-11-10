@@ -33,4 +33,4 @@ tests:
       controls: [rd_related, project_based, asset_related, income_related, tax_refund, employment_related, cumulative, size, lev_w, roa_w, growth_w, cash_w, soe, age]
       fe: [industry1, year]
       cluster: [sec_code, announcement_date]
-output_dir: D:/empirical-kit/examples/gov-subsidy/output
+output_dir: examples/gov-subsidy/output

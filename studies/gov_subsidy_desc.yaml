@@ -24,4 +24,4 @@ tests:
       id: vif_main
       vars: [log_amount, size, lev_w, roa_w, growth_w, cash_w, soe, age]
       fe: [industry1, year]
-output_dir: D:/empirical-kit/examples/gov-subsidy/output_desc
+output_dir: examples/gov-subsidy/output_desc
